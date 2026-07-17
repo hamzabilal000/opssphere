@@ -1,0 +1,25 @@
+{
+  "name": "opssphere",
+  "private": true,
+  "version": "0.1.0",
+  "description": "OpsSphere - Multi-tenant enterprise operations platform (MERN monorepo)",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter ./apps/* run dev",
+    "dev:api": "pnpm --filter @opssphere/api run dev",
+    "dev:web": "pnpm --filter @opssphere/web run dev",
+    "build": "pnpm --recursive run build",
+    "lint": "pnpm --recursive run lint",
+    "typecheck": "pnpm --recursive run typecheck",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.3"
+  },
+  "packageManager": "pnpm@9.0.0"
+}

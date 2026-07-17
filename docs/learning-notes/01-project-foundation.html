@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 01 — Project Foundation (Simple Version)</title>
+<style>
+  :root {
+    --navy: #0f2138;
+    --navy2: #12406b;
+    --teal: #16b8a6;
+    --blue: #2f6fed;
+    --text: #26303d;
+    --muted: #5a6576;
+    --bg-soft: #f6f8fb;
+    --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif;
+    color: var(--text);
+    background: #fff;
+    margin: 0;
+    line-height: 1.65;
+    font-size: 16px;
+  }
+  .hero {
+    background: linear-gradient(160deg, #0f2138 0%, #14314f 55%, #0d2436 100%);
+    color: #fff;
+    padding: 42px 8vw 34px 8vw;
+  }
+  .hero .kicker { color: #7fa0c9; font-size: 13px; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 10px; }
+  .hero h1 { font-size: 27px; margin: 0 0 8px 0; }
+  .hero p.sub { color: #b8c6db; font-size: 15px; max-width: 700px; margin: 0; }
+  .daychip {
+    display: inline-block; background: rgba(22,184,166,0.18); border: 1px solid #16b8a6;
+    color: #7be9d8; font-size: 12.5px; font-weight: 700; padding: 4px 14px; border-radius: 20px;
+    margin-bottom: 16px;
+  }
+  .wrap { max-width: 800px; margin: 0 auto; padding: 36px 8vw 80px 8vw; }
+  h2 {
+    font-size: 21px; color: var(--navy); margin-top: 42px; margin-bottom: 14px;
+    border-bottom: 2px solid var(--teal); padding-bottom: 6px;
+  }
+  h3 { font-size: 16px; color: var(--navy2); margin-top: 22px; margin-bottom: 8px; }
+  p { margin: 10px 0; font-size: 16px; }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 8px; font-size: 16px; }
+  code {
+    font-family: 'SF Mono', Consolas, Monaco, monospace;
+    font-size: 14px;
+    background: #eef1f5; padding: 1px 6px; border-radius: 4px; color: #b3273e;
+  }
+  pre {
+    background: #0f2138; color: #e6edf6; padding: 16px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 13.5px; line-height: 1.6; margin: 12px 0 20px 0;
+  }
+  pre code { background: none; color: inherit; padding: 0; font-size: 13.5px; }
+
+  .callout {
+    background: #eef6f6; border-left: 4px solid var(--teal); padding: 14px 18px;
+    border-radius: 6px; margin: 18px 0; font-size: 15.5px;
+  }
+  .callout.blue { background: #eaf2fb; border-left-color: var(--blue); }
+  .callout.amber { background: #fdf6e8; border-left-color: #e0a72e; }
+  .callout strong.title { display: block; color: var(--navy); margin-bottom: 5px; font-size: 15.5px; }
+
+  .step {
+    display: flex; gap: 14px; margin-bottom: 16px; align-items: flex-start;
+  }
+  .step .num {
+    flex: 0 0 30px; height: 30px; background: var(--navy); color: #fff; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
+  }
+  .step .stext { padding-top: 3px; font-size: 15.5px; }
+  .step .stext b { color: var(--navy); }
+
+  table { width: 100%; border-collapse: collapse; margin: 14px 0 20px 0; font-size: 14.5px; }
+  th { background: var(--navy); color: #fff; text-align: left; padding: 8px 10px; }
+  td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: var(--bg-soft); }
+
+  .checklist { list-style: none; padding-left: 0; }
+  .checklist li { padding-left: 28px; position: relative; margin-bottom: 8px; }
+  .checklist li::before { content: "✓"; position: absolute; left: 0; top: 0; color: var(--teal); font-weight: 700; }
+
+  .nav-footer {
+    display: flex; justify-content: space-between; margin-top: 50px; padding-top: 20px;
+    border-top: 1px solid var(--border); font-size: 13.5px; color: var(--muted); flex-wrap: wrap; gap: 8px;
+  }
+  a { color: var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 1 OF 18</div>
+  <h1>Project Foundation — the simple version</h1>
+  <p class="sub">No jargon walls this time. Just: what got built, why, and a plain-English
+  crash course on the new syntax you'll see in the code.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Today we didn't build any real feature — no login, no database records yet. We built the empty
+"container" everything else will live in: a folder for the backend, a folder for the frontend, and a
+few shared files between them. Think of it like building the shell of a house before wiring the
+electricity — nothing works yet, but the frame is solid and every room has already been planned.</p>
+
+<div class="callout blue">
+  <strong class="title">The single most important thing to know</strong>
+  Every code file now has long comments written directly inside it, in plain English, explaining what
+  each part does — including any TypeScript syntax you haven't seen before. <b>Open the actual files and
+  read the comments as you go</b> — this note is just the map; the code itself is the real lesson.
+</div>
+
+<h2>TypeScript in 2 minutes (for someone who knows JavaScript)</h2>
+<p>Your other projects use plain JavaScript with <code>require()</code> and <code>module.exports</code>.
+This project uses TypeScript, which is just JavaScript with a few extra bits sprinkled on top. Here's
+everything new you'll actually see, in one place:</p>
+
+<table>
+  <tr><th>What you'll see</th><th>What it means, in plain English</th></tr>
+  <tr><td><code>import x from "y"</code></td><td>Same job as <code>const x = require("y")</code> — just newer syntax.</td></tr>
+  <tr><td><code>export const x = ...</code></td><td>Same job as <code>module.exports = { x }</code>.</td></tr>
+  <tr><td><code>: string</code>, <code>: number</code></td><td>"This value must always be this type." Purely a hint for your editor — it's removed automatically before the code runs.</td></tr>
+  <tr><td><code>interface Thing { ... }</code></td><td>A form template describing what fields an object must have. Doesn't create any real data — just a rule your editor checks for you.</td></tr>
+  <tr><td><code>field?: string</code></td><td>The <code>?</code> means "this field is optional, it's fine to leave it out."</td></tr>
+  <tr><td><code>SomeType&lt;T&gt;</code></td><td>A "fill in the blank" type. E.g. <code>ApiResponse&lt;HealthStatus&gt;</code> means "a response, where the data is specifically a HealthStatus."</td></tr>
+  <tr><td><code>value as SomeType</code></td><td>"Trust me, treat this as this type" — used when TypeScript can't automatically figure out what something is.</td></tr>
+  <tr><td><code>value?.field</code></td><td>"Optional chaining" — try to read <code>.field</code>, but don't crash if <code>value</code> is missing.</td></tr>
+</table>
+
+<div class="callout amber">
+  <strong class="title">You don't need to memorize this table</strong>
+  Every time one of these shows up in the actual code, there's a comment right next to it explaining it
+  again in context. Come back to this table only when you forget what a symbol means.
+</div>
+
+<h2>What actually happens when you run the app</h2>
+<p>Instead of a wall of separate explanations, here's the story in order — this is the exact path a
+request takes, start to finish:</p>
+
+<div class="step"><div class="num">1</div><div class="stext"><b>You run <code>pnpm dev</code>.</b> This starts two programs at once: the Express server (backend) and the Vite dev server (frontend).</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>The backend checks its settings first.</b> <code>apps/api/src/config/env.ts</code> reads your <code>.env</code> file and double-checks every value is present and correctly formatted. If something's missing, it stops immediately with a clear error instead of starting broken.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>The backend connects to MongoDB.</b> <code>apps/api/src/lib/db.ts</code> opens the database connection — same job as the one-liner you already know, just in its own file.</div></div>
+<div class="step"><div class="num">4</div><div class="stext"><b>The backend starts listening.</b> <code>apps/api/src/index.ts</code> builds the Express app (from <code>app.ts</code>) and calls <code>.listen(4000)</code> — same as your usual <code>app.listen(8080, ...)</code>.</div></div>
+<div class="step"><div class="num">5</div><div class="stext"><b>You open the browser at localhost:5173.</b> React loads, and <code>App.tsx</code> immediately calls the backend's health-check route to ask "are you alive?"</div></div>
+<div class="step"><div class="num">6</div><div class="stext"><b>The backend replies.</b> <code>health.routes.ts</code> sends back a small JSON object saying "yes, I'm running, and here's how long I've been up."</div></div>
+<div class="step"><div class="num">7</div><div class="stext"><b>The screen updates.</b> The card on screen flips from "Checking API connection…" to showing the real status — proving the whole chain (React → Express → MongoDB) is actually wired together correctly.</div></div>
+
+<h2>The folders, in one picture</h2>
+<pre><code>OpsSphere/
+├── apps/
+│   ├── api/     <span style="color:#7be9d8">→ the Express backend (like your usual "server" folder)</span>
+│   └── web/     <span style="color:#7be9d8">→ the React frontend (like your usual "client" folder)</span>
+├── packages/    <span style="color:#7be9d8">→ small bits shared between api and web</span>
+└── docker-compose.yml <span style="color:#7be9d8">→ starts MongoDB + a few other local tools</span></code></pre>
+
+<p>The 4 folders inside <code>packages/</code> are small and boring on purpose:</p>
+<ul>
+  <li><b>shared-types</b> — just describes what API responses look like, so both sides agree.</li>
+  <li><b>validation</b> — shared rules for "is this data valid?" (used by both sides eventually).</li>
+  <li><b>eslint-config</b> and <b>tsconfig</b> — shared settings files, nothing to read closely yet.</li>
+</ul>
+
+<h2>What to actually do now</h2>
+<ol>
+  <li>Open the project in your code editor.</li>
+  <li>Start with <code>apps/api/src/index.ts</code> — it's the shortest file and the comments walk through the startup order step by step.</li>
+  <li>Then read <code>apps/api/src/app.ts</code>, then <code>apps/web/src/App.tsx</code> — in that order.</li>
+  <li>Follow the run instructions below and confirm you see the green "status: ok" card in your browser.</li>
+</ol>
+
+<h2>How to run it</h2>
+<pre><code><span style="color:#7be9d8"># 1. install dependencies for the whole project</span>
+pnpm install
+
+<span style="color:#7be9d8"># 2. start MongoDB, Redis, Mailpit, MinIO (Docker Desktop must be open)</span>
+pnpm docker:up
+
+<span style="color:#7be9d8"># 3. create your local settings file</span>
+copy .env.example apps\api\.env
+
+<span style="color:#7be9d8"># 4. run backend + frontend together</span>
+pnpm dev</code></pre>
+<p>Then open <a href="http://localhost:5173">http://localhost:5173</a>. A green "status: ok" card means
+everything is wired together correctly.</p>
+
+<h2>What was checked already vs. what's still on you</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every settings file is written correctly (valid JSON)</td><td>✅ Done</td></tr>
+  <tr><td>All the package names/versions exist and install without errors</td><td>✅ Done</td></tr>
+  <tr><td>The full install finishes on your machine</td><td>⏳ You need to run <code>pnpm install</code> yourself</td></tr>
+  <tr><td>The green "status: ok" card actually shows up</td><td>⏳ You need to check this after running <code>pnpm dev</code></td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Day 2 is the first real feature: <b>Authentication</b> — creating an account, logging in, logging out.
+It'll reuse everything from today (the logger, the database connection, the error-handling pattern), so
+today's work wasn't wasted even though nothing "visible" got built yet.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 01 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

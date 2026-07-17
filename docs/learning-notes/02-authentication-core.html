@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 02 — Authentication Core</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 2 OF 18</div>
+  <h1>Authentication Core</h1>
+  <p class="sub">Register, verify your email, log in, log out. The first feature where the app
+  actually does something you can see and use.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Today the app got its first real feature. You can create an account, get a verification email
+(delivered to Mailpit, our fake local inbox), click the link to verify it, log in, see a dashboard
+that proves you're actually logged in, and log out. Every one of these steps is real, working code —
+nothing is faked or mocked.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as Day 1</strong>
+  Every file involved has comments explaining what's new. This note is the map — the actual lesson is
+  in the files themselves, especially <code>auth.service.ts</code> and <code>auth.tokens.ts</code>.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. Password hashing — why we never store real passwords</h3>
+<p>We never save your actual password anywhere. Instead, <code>lib/password.ts</code> runs it through
+a one-way scrambler (bcrypt) and saves the scrambled result. "One-way" means you can turn a password
+into a scramble, but never turn the scramble back into the password. To check a login, we scramble
+the password you just typed and compare the two scrambles — we never "unscramble" anything.</p>
+
+<h3>2. JWTs and cookies — how the app remembers you're logged in</h3>
+<p>HTTP (the protocol behind every web request) has no memory by default — every request is treated
+like it's from a total stranger. To fix that, when you log in, the server hands your browser a small
+signed note (a "JWT") saying "this is user #123," and the browser automatically attaches that note to
+every future request via a cookie. The server checks the note's signature on each request
+(<code>auth.middleware.ts</code>) to confirm it's genuine and hasn't expired.</p>
+
+<h3>3. Email verification — proving you own that email address</h3>
+<p>When you register, we generate a long random code, email you a link containing it, and save only a
+scrambled version of that code in the database (same "one-way" idea as passwords). Clicking the link
+sends the code back to us; we scramble it the same way and check for a match. This proves you can
+actually receive mail at that address — not just that you typed something that looks like an email.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext"><b>You fill out the register form.</b> React sends your email + password to <code>POST /api/v1/auth/register</code>.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>The backend checks the shape of your data.</b> A shared Zod schema (used by BOTH frontend and backend) checks the email looks real and the password is at least 8 characters.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>The backend hashes your password</b> and saves a new User document in MongoDB, along with a hashed, expiring verification code.</div></div>
+<div class="step"><div class="num">4</div><div class="stext"><b>An email gets "sent"</b> — really it lands in Mailpit's inbox at <a href="http://localhost:8025">localhost:8025</a>, with a link back to your React app.</div></div>
+<div class="step"><div class="num">5</div><div class="stext"><b>You click that link.</b> It opens <code>/verify-email?token=...</code> in React, which immediately calls the backend to confirm the code and mark your account verified.</div></div>
+<div class="step"><div class="num">6</div><div class="stext"><b>You log in.</b> The backend checks your password's hash matches, confirms your email is verified, and sends back a signed JWT in a cookie.</div></div>
+<div class="step"><div class="num">7</div><div class="stext"><b>You land on the dashboard.</b> It calls <code>GET /api/v1/auth/me</code> — a "protected" route that only answers if your cookie checks out — and shows your account details back to you.</div></div>
+<div class="step"><div class="num">8</div><div class="stext"><b>You log out.</b> The backend clears the cookie. Trying to revisit the dashboard now bounces you back to login.</div></div>
+
+<h2>The new files, in one picture</h2>
+<pre><code>apps/api/src/
+├── lib/
+│   ├── password.ts     <span style="color:#7be9d8">→ hash/check passwords</span>
+│   └── mailer.ts        <span style="color:#7be9d8">→ send the verification email (to Mailpit)</span>
+└── modules/auth/
+    ├── user.model.ts     <span style="color:#7be9d8">→ the MongoDB "users" collection</span>
+    ├── auth.tokens.ts     <span style="color:#7be9d8">→ create/check the login JWT + verification codes</span>
+    ├── auth.service.ts    <span style="color:#7be9d8">→ the actual register/verify/login rules</span>
+    ├── auth.middleware.ts <span style="color:#7be9d8">→ "is this request logged in?" gatekeeper</span>
+    ├── auth.controller.ts <span style="color:#7be9d8">→ turns HTTP requests into service calls</span>
+    └── auth.routes.ts      <span style="color:#7be9d8">→ wires URLs to the controller functions</span>
+
+apps/web/src/Pages/
+├── RegisterPage.tsx   <span style="color:#7be9d8">→ the sign-up form</span>
+├── LoginPage.tsx        <span style="color:#7be9d8">→ the login form</span>
+├── VerifyEmailPage.tsx  <span style="color:#7be9d8">→ handles the emailed link</span>
+└── DashboardPage.tsx    <span style="color:#7be9d8">→ what you see once logged in</span></code></pre>
+
+<p><code>App.tsx</code> is now ONLY a list of routes (register → login → verify-email → dashboard) — all
+the actual logic moved into the Pages above. That's a deliberate style choice: keep App.tsx as a map,
+not a place where real logic lives.</p>
+
+<h2>A security detail worth understanding: why login errors are vague</h2>
+<div class="callout amber">
+  <strong class="title">"Invalid email or password" — on purpose, both times</strong>
+  Whether you typed an email that doesn't exist, or the right email with a wrong password, you get the
+  <i>exact same</i> error message. If we said "no account with that email" separately from "wrong
+  password," an attacker could use that difference to figure out which email addresses have accounts on
+  the platform, one guess at a time — called account enumeration. One identical message for both cases
+  closes that door.
+</div>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Make sure Docker is still running (<code>pnpm docker:up</code> if you restarted your computer).</li>
+  <li>Run <code>pnpm install</code> again first — three new libraries were added (bcryptjs, jsonwebtoken, nodemailer).</li>
+  <li>Run <code>pnpm dev</code>, open <a href="http://localhost:5173">http://localhost:5173</a>.</li>
+  <li>Register with any email/password (8+ characters).</li>
+  <li>Open <a href="http://localhost:8025">http://localhost:8025</a> (Mailpit), open the email, click the verification link.</li>
+  <li>Log in with the same email/password, and confirm you land on a dashboard showing your account info.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every file compiles with no TypeScript errors (checked in a sandbox copy)</td><td>✅ Confirmed</td></tr>
+  <tr><td>New packages (bcryptjs, jsonwebtoken, nodemailer) install cleanly</td><td>✅ Confirmed</td></tr>
+  <tr><td>Routing, validation errors, and the "not logged in" 401 all work correctly (tested without a database)</td><td>✅ Confirmed</td></tr>
+  <tr><td>The full register → verify → login → dashboard flow, against a real database</td><td>⏳ Needs you to test it locally (see steps above)</td></tr>
+</table>
+
+<h2>A real bug we hit (and what it taught us)</h2>
+<div class="callout amber">
+  <strong class="title">"Verification failed" even though it actually worked</strong>
+  While testing this, clicking the email link showed <b>"This verification link is invalid or has
+  expired"</b> — even though the account really was verified. The cause: React's development mode
+  deliberately runs page-load effects <i>twice</i> on purpose, as a built-in check for exactly this kind
+  of mistake. Our verification call isn't safe to run twice — the first call correctly "uses up" the
+  token (like a one-time password reset link), so the second call fails. Because the failing second call
+  finished last, its error message overwrote the real success message on screen.
+</div>
+<p>The fix (already applied in <code>VerifyEmailPage.tsx</code>): a <code>useRef</code> flag that
+remembers "I already ran this" across both of React's intentional double-calls, so the API only actually
+gets hit once. This is a well-known React pattern, not a one-off hack — any page-load effect that calls
+an API which "consumes" something (a token, an invite, a one-time code) needs this same protection.</p>
+
+<h2>What's next</h2>
+<p>Day 3 builds on today directly: session lists (so you can see and revoke logged-in devices),
+refresh-token rotation (so a stolen login token becomes useless quickly), password reset, and organization
+invitations. All of it reuses the User model, the JWT helpers, and the mailer built today.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 02 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>
