@@ -114,3 +114,26 @@ export interface AuthUser {
   isEmailVerified: boolean;
   createdAt: string;
 }
+
+// ============================================================================
+// DAY 3 — SESSIONS & INVITATIONS TYPES
+// ============================================================================
+
+/** One row in the "where you're logged in" list (GET /api/v1/auth/sessions). */
+export interface SessionSummary {
+  id: string;
+  userAgent?: string;
+  ipAddress?: string;
+  createdAt: string;
+  lastUsedAt: string;
+  expiresAt: string;
+  // true for whichever session belongs to the request that asked for this
+  // list - lets the frontend show "(this device)" next to the right one.
+  isCurrent: boolean;
+}
+
+/** What the accept-invitation page shows before the user sets a password. */
+export interface InvitationPreview {
+  email: string;
+  expiresAt: string;
+}

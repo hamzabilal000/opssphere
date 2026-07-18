@@ -71,3 +71,32 @@ export async function sendVerificationEmail(to: string, verifyUrl: string): Prom
 // HOW TO SEE THIS WORKING: open http://localhost:8025 (Mailpit's web inbox)
 // after registering a new account — the email above will show up there,
 // exactly like a real inbox, without ever leaving your computer.
+
+// ============================================================================
+// DAY 3 additions — same sendMail() helper, two new email templates
+// ============================================================================
+
+export async function sendPasswordResetEmail(to: string, resetUrl: string): Promise<void> {
+  await sendMail({
+    to,
+    subject: "Reset your OpsSphere password",
+    html: `
+      <p>We received a request to reset your OpsSphere password. Click the link below to choose a new one:</p>
+      <p><a href="${resetUrl}">${resetUrl}</a></p>
+      <p>This link expires in 1 hour. If you didn't request this, you can safely ignore this email —
+      your password has not been changed.</p>
+    `,
+  });
+}
+
+export async function sendInvitationEmail(to: string, acceptUrl: string): Promise<void> {
+  await sendMail({
+    to,
+    subject: "You've been invited to OpsSphere",
+    html: `
+      <p>You've been invited to join OpsSphere. Click the link below to create your account:</p>
+      <p><a href="${acceptUrl}">${acceptUrl}</a></p>
+      <p>This invitation expires in 7 days.</p>
+    `,
+  });
+}

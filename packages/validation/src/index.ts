@@ -84,3 +84,29 @@ export const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
+
+// ============================================================================
+// DAY 3 — PASSWORD RESET & INVITATION SCHEMAS
+// ============================================================================
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Enter a valid email address").toLowerCase(),
+});
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(1, "Reset token is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const createInvitationSchema = z.object({
+  email: z.string().email("Enter a valid email address").toLowerCase(),
+});
+export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;
+
+export const acceptInvitationSchema = z.object({
+  token: z.string().min(1, "Invitation token is required"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;

@@ -1,5 +1,11 @@
-import type { ApiResponse, AuthUser, HealthStatus } from "@opssphere/shared-types";
-import type { RegisterInput, LoginInput } from "@opssphere/validation";
+import type { ApiResponse, AuthUser, HealthStatus, SessionSummary, InvitationPreview } from "@opssphere/shared-types";
+import type {
+  RegisterInput,
+  LoginInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
+  CreateInvitationInput,
+} from "@opssphere/validation";
 
 /**
  * Thin fetch wrapper. Every module's data-fetching hooks (useProjects,
@@ -56,4 +62,56 @@ export function logoutUser(): Promise<null> {
 
 export function getMe(): Promise<{ user: AuthUser }> {
   return apiRequest("/auth/me");
+}
+
+// ============================================================================
+// DAY 3 — SESSIONS, PASSWORD RECOVERY & INVITATIONS API CALLS
+// ----------------------------------------------------------------------------
+// Same wrapper, same pattern - every function here is just "call this URL,
+// unwrap the envelope, return the typed data." Nothing new conceptually
+// compared to the Day 2 functions above.
+// ============================================================================
+
+// Note: we don't call this one ourselves anywhere yet. When an access
+// token expires (after 15 minutes), any protected call will fail with
+// AUTHENTICATION_REQUIRED - a later day can wire this up to run
+// automatically when that happens. For now it's here so the backend
+// feature is reachable and testable from the frontend.
+export function refreshSession(): Promise<null> {
+  return apiRequest("/auth/refresh", { method: "POST" });
+}
+
+export function listSessions(): Promise<{ sessions: SessionSummary[] }> {
+  return apiRequest("/auth/sessions");
+}
+
+export function revokeSession(id: string): Promise<null> {
+  return apiRequest(`/auth/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+export function revokeOtherSessions(): Promise<null> {
+  return apiRequest("/auth/sessions", { method: "DELETE" });
+}
+
+export function forgotPassword(input: ForgotPasswordInput): Promise<null> {
+  return apiRequest("/auth/forgot-password", { method: "POST", body: input });
+}
+
+export function resetPassword(input: ResetPasswordInput): Promise<null> {
+  return apiRequest("/auth/reset-password", { method: "POST", body: input });
+}
+
+export function createInvitation(input: CreateInvitationInput): Promise<null> {
+  return apiRequest("/auth/invitations", { method: "POST", body: input });
+}
+
+export function getInvitationPreview(token: string): Promise<InvitationPreview> {
+  return apiRequest(`/auth/invitations/${encodeURIComponent(token)}`);
+}
+
+export function acceptInvitation(token: string, password: string): Promise<{ user: AuthUser }> {
+  return apiRequest(`/auth/invitations/${encodeURIComponent(token)}/accept`, {
+    method: "POST",
+    body: { password },
+  });
 }

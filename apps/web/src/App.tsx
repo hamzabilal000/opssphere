@@ -14,6 +14,9 @@ import RegisterPage from "./Pages/RegisterPage";
 import LoginPage from "./Pages/LoginPage";
 import VerifyEmailPage from "./Pages/VerifyEmailPage";
 import DashboardPage from "./Pages/DashboardPage";
+import ForgotPasswordPage from "./Pages/ForgotPasswordPage";
+import ResetPasswordPage from "./Pages/ResetPasswordPage";
+import AcceptInvitationPage from "./Pages/AcceptInvitationPage";
 
 export default function App() {
   return (
@@ -22,6 +25,10 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/dashboard" element={<DashboardPage />} />
+      {/* Day 3: password recovery + invitations */}
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
       {/* Anything unmatched just goes back to the register page for now -
           real 404 handling can come later once there's a real app shell. */}
       <Route path="*" element={<Navigate to="/" replace />} />

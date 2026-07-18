@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 03 — Sessions, Recovery & Invitations</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 3 OF 18</div>
+  <h1>Sessions, Recovery &amp; Invitations</h1>
+  <p class="sub">Where you're logged in, what happens if a login token leaks, forgetting your
+  password, and inviting someone new. Four features, all built on top of Day 2's login system.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Day 2 gave you a login that lasts until the cookie expires. Today makes that login system
+production-grade: you can see every device you're logged in on and kick one out, a stolen login
+token stops working automatically instead of staying valid for weeks, you can reset a forgotten
+password by email, and you can invite someone else to create an account without them registering
+themselves. Same rule as always — every file has comments, this note is the map.</p>
+
+<h2>Four new concepts, explained simply</h2>
+
+<h3>1. Two tokens instead of one — access tokens vs. refresh tokens</h3>
+<p>Day 2 gave you a single login token (JWT) that lasted a while. The problem: the longer a token
+lives, the longer it stays dangerous if it's ever stolen. Day 3 splits this into two: a short-lived
+<b>access token</b> (15 minutes — this is what actually gets checked on every request) and a
+long-lived <b>refresh token</b> (30 days — its only job is "let me get a new access token without
+typing my password again"). When the access token expires, the browser quietly calls
+<code>POST /auth/refresh</code> using the refresh token to get a fresh one. You stay logged in, but
+the token that's actually being checked everywhere only has a 15-minute shelf life if it ever leaks.</p>
+
+<h3>2. Refresh rotation — why the old refresh token gets thrown away every time it's used</h3>
+<p>Every time <code>/refresh</code> is called, the server doesn't just check the refresh token — it
+immediately replaces it with a brand new one and makes the old one permanently invalid. This is
+called "rotation." The payoff: if someone ever steals a copy of your refresh token (say, from a
+compromised laptop) and your real browser keeps using the app normally, your browser will rotate the
+token away before the thief gets a chance to use their stolen copy. And if the thief tries their
+copy first — see the next concept.</p>
+
+<h3>3. Reuse detection — turning a stolen-token attempt into an alarm</h3>
+<p>Because every refresh token becomes invalid the moment it's rotated, there's exactly one way an
+"old, already-rotated-away" token could ever be presented again: someone has a copy that isn't the
+real, current one. So when that happens, we don't just reject the request — we revoke the <i>entire
+session</i> immediately, logging that device out completely. A legitimate user's browser would never
+naturally do this; only a stolen copy would. See <code>refreshSession</code> in
+<code>auth.service.ts</code> for exactly how this check works.</p>
+
+<h3>4. One-time tokens, reused three ways</h3>
+<p>Email verification (Day 2), password reset, and invitations all use the exact same underlying
+trick: generate a long random code, email the raw version, save only a scrambled (hashed) version in
+the database. Reusing one well-tested pattern for three different features, instead of inventing
+three slightly-different ones, is why <code>auth.tokens.ts</code> now calls this a generic
+"one-time token" instead of a "verification token."</p>
+
+<h2>What actually happens, step by step</h2>
+
+<h3>Logging in and staying logged in</h3>
+<div class="step"><div class="num">1</div><div class="stext"><b>You log in.</b> The backend creates a <code>Session</code> document (which device, which IP, when it expires) and sends back BOTH an access token cookie and a refresh token cookie.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>The refresh cookie is scoped narrowly.</b> It's only ever sent to <code>/api/v1/auth/*</code> routes (not every API call) — see the <code>path</code> option in <code>auth.controller.ts</code>.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>15 minutes later, the access token expires.</b> The next protected request would normally fail — this is where a future day wires up an automatic call to <code>/auth/refresh</code>.</div></div>
+<div class="step"><div class="num">4</div><div class="stext"><b>/auth/refresh checks the refresh token</b> against the Session's stored hash, rotates it, and returns a new pair of cookies.</div></div>
+<div class="step"><div class="num">5</div><div class="stext"><b>On the dashboard, you see every active session</b> — <code>GET /auth/sessions</code> — and can revoke any one of them, or log out everywhere else at once.</div></div>
+
+<h3>Forgetting your password</h3>
+<div class="step"><div class="num">1</div><div class="stext"><b>You request a reset</b> from <code>/forgot-password</code>. The backend always replies with the same neutral message, whether or not that email actually has an account.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>If it does exist,</b> a one-time reset link is emailed (to Mailpit locally), expiring in 1 hour.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>You click it, set a new password</b> on <code>/reset-password</code>. The backend checks the code, updates your password hash, and — importantly — revokes every one of your active sessions, everywhere.</div></div>
+
+<h3>Inviting someone</h3>
+<div class="step"><div class="num">1</div><div class="stext"><b>A logged-in user invites an email</b> from the dashboard. A 7-day invitation link is emailed to them.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>They open the link</b> at <code>/accept-invitation?token=...</code>, which shows their email and asks them to choose a password.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>Submitting creates their account</b> — pre-verified (accepting the link already proves they own that email) — and logs them straight in.</div></div>
+
+<h2>The new files, in one picture</h2>
+<pre><code>apps/api/src/modules/auth/
+├── session.model.ts     <span style="color:#7be9d8">→ the MongoDB "sessions" collection (one row per logged-in device)</span>
+├── invitation.model.ts  <span style="color:#7be9d8">→ the MongoDB "invitations" collection</span>
+├── auth.tokens.ts        <span style="color:#7be9d8">→ UPDATED: now also signs/checks refresh tokens</span>
+├── auth.service.ts       <span style="color:#7be9d8">→ UPDATED: refresh rotation, sessions, reset, invitations</span>
+├── auth.controller.ts    <span style="color:#7be9d8">→ UPDATED: new handlers, sets the refresh cookie too</span>
+└── auth.routes.ts        <span style="color:#7be9d8">→ UPDATED: /refresh, /sessions, /forgot-password, /invitations...</span>
+
+apps/web/src/Pages/
+├── ForgotPasswordPage.tsx  <span style="color:#7be9d8">→ "enter your email" form</span>
+├── ResetPasswordPage.tsx    <span style="color:#7be9d8">→ "choose a new password" form</span>
+├── AcceptInvitationPage.tsx <span style="color:#7be9d8">→ preview + "choose a password" for invitees</span>
+└── DashboardPage.tsx         <span style="color:#7be9d8">→ UPDATED: sessions list + invite-someone form</span></code></pre>
+
+<h2>A security detail worth understanding: why logout revokes the session server-side</h2>
+<div class="callout amber">
+  <strong class="title">Clearing a cookie isn't the same as ending a session</strong>
+  Day 2's logout only cleared the browser's cookie. That's enough for the browser you clicked
+  "log out" on, but if a copy of the refresh token existed anywhere else (another tab's storage, a
+  proxy log, a stolen backup), it would still work. Day 3's logout also marks the <code>Session</code>
+  document itself as revoked in the database — so even a token that still physically exists somewhere
+  stops being accepted the moment you log out.
+</div>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> (no new packages today, but harmless to re-run).</li>
+  <li>Run <code>pnpm dev</code>, log in as usual.</li>
+  <li>On the dashboard, look at "Where you're logged in" — you should see one row marked "This device."</li>
+  <li>Log in again from a different browser (or incognito window) with the same account, then refresh the first dashboard — you'll see two sessions, and can revoke the second one from the first.</li>
+  <li>Try "Forgot your password?" from the login page, and check <a href="http://localhost:8025">localhost:8025</a> (Mailpit) for the reset email.</li>
+  <li>Invite yourself with a second email address (or a "+alias", e.g. <code>you+test@gmail.com</code>) from the dashboard, then open the invite email and accept it.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every file (shared-types, validation, api, web) compiles with no TypeScript errors (checked in a sandbox copy)</td><td>✅ Confirmed</td></tr>
+  <tr><td>Auth-gate rules: /sessions, /invitations (create) all correctly reject requests with no login cookie</td><td>✅ Confirmed (401, tested without a database)</td></tr>
+  <tr><td>Validation rules: forgot-password, reset-password, and accept-invitation all correctly reject bad input</td><td>✅ Confirmed (400, tested without a database)</td></tr>
+  <tr><td>/refresh correctly rejects requests with no refresh cookie</td><td>✅ Confirmed</td></tr>
+  <tr><td>The full refresh-rotation, reuse-detection, and email flows against a real database</td><td>⏳ Needs you to test it locally (see steps above)</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Day 4 moves on to Organizations &amp; Multi-Tenancy — the first feature where more than one
+"workspace" can exist, and where the sessions/invitations groundwork from today starts connecting to
+actual team membership and roles.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 03 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

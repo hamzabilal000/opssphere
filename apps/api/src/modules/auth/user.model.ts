@@ -33,6 +33,9 @@ export interface UserAttrs {
   // at any given moment (only right after registering).
   emailVerificationTokenHash?: string;
   emailVerificationTokenExpiresAt?: Date;
+  // DAY 3 — same one-time-token pattern, reused for "forgot password."
+  passwordResetTokenHash?: string;
+  passwordResetTokenExpiresAt?: Date;
   // These two are never set manually anywhere in our code — the
   // `timestamps: true` option below tells Mongoose to fill them in and
   // keep them updated automatically. We still list them here so
@@ -79,6 +82,14 @@ const userSchema = new Schema<UserAttrs>(
       select: false,
     },
     emailVerificationTokenExpiresAt: {
+      type: Date,
+      select: false,
+    },
+    passwordResetTokenHash: {
+      type: String,
+      select: false,
+    },
+    passwordResetTokenExpiresAt: {
       type: Date,
       select: false,
     },

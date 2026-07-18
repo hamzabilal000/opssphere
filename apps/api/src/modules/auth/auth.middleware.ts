@@ -37,11 +37,23 @@ declare global {
   namespace Express {
     interface Request {
       userId?: string;
+      // DAY 3: which Session document this request's access token belongs
+      // to - lets logout revoke the right session, and lets the sessions
+      // list mark which row is "this device."
+      sessionId?: string;
     }
   }
 }
 
 export const ACCESS_TOKEN_COOKIE = "opssphere_access_token";
+
+// DAY 3: the refresh token's own cookie. It's set with `path:
+// "/api/v1/auth"` (see auth.controller.ts) so the browser ONLY attaches it
+// to requests under /api/v1/auth/* (refresh, logout) — not to every single
+// API call the way the access token cookie is. That way, if the access
+// token cookie ever leaked through some unrelated route, the much
+// longer-lived refresh token still wouldn't be exposed alongside it.
+export const REFRESH_TOKEN_COOKIE = "opssphere_refresh_token";
 
 // This is the middleware itself — same 3-argument (req, res, next) shape
 // you always use. Any route that should require login gets this added in
@@ -60,6 +72,7 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction) {
   try {
     const payload = verifyAccessToken(token);
     req.userId = payload.sub; // now available to every route handler after this middleware
+    req.sessionId = payload.sid;
     next(); // "I'm done, let the request continue to the actual route"
   } catch {
     // jwt.verify throws if the token is expired, malformed, or tampered
