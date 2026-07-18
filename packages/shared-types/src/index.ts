@@ -132,10 +132,15 @@ export interface SessionSummary {
   isCurrent: boolean;
 }
 
-/** What the accept-invitation page shows before the user sets a password. */
+/** What the accept-invitation page shows before the user sets a password.
+ * `organizationName`/`roleName` only appear (Day 5 onward) for invitations
+ * sent FROM inside an organization - a plain, no-org invitation (Day 3
+ * style) leaves both undefined. */
 export interface InvitationPreview {
   email: string;
   expiresAt: string;
+  organizationName?: string;
+  roleName?: string;
 }
 
 // ============================================================================
@@ -147,17 +152,16 @@ export interface InvitationPreview {
 // is the link saying "this user belongs to this organization, with this role."
 // ============================================================================
 
-/** Only two roles for now - the full permission system (project.create,
- * ticket.assign, etc) is a Day 5 feature. Every org needs exactly one
- * concept today: "can this person manage the org itself, or not." */
-export type MembershipRole = "owner" | "member";
-
 /** A suspended member keeps their account but loses access to this ONE
  * organization - see tenant.middleware.ts for where this gets enforced. */
 export type MembershipStatus = "active" | "suspended";
 
 /** One row in "your organizations" - note `myRole`, which is the CURRENT
- * user's role in THIS org, not a general property of the org itself. */
+ * user's role NAME in THIS org (e.g. "Owner", "Member", or a custom role
+ * someone made up), not a general property of the org itself. As of Day 5,
+ * roles are real, editable database records (see RoleSummary below)
+ * instead of a fixed "owner" | "member" choice — `myRole` is just that
+ * role's display name. */
 export interface OrganizationSummary {
   id: string;
   name: string;
@@ -165,7 +169,7 @@ export interface OrganizationSummary {
   timeZone: string;
   businessHours: { start: string; end: string };
   createdAt: string;
-  myRole: MembershipRole;
+  myRole: string;
 }
 
 /** One row in an organization's member list. */
@@ -173,7 +177,77 @@ export interface MembershipSummary {
   id: string;
   userId: string;
   email: string;
-  role: MembershipRole;
+  roleId: string;
+  roleName: string;
   status: MembershipStatus;
   joinedAt: string;
+}
+
+// ============================================================================
+// DAY 5 — ROLES & PERMISSIONS TYPES
+// ----------------------------------------------------------------------------
+// A "permission" is just a short string naming ONE specific action, e.g.
+// "role.manage" or "member.invite" - see PERMISSIONS below for the full
+// list. A "role" is nothing more than a NAME plus a LIST of these strings.
+// Checking "can this person do X?" always comes down to one simple
+// question: "does their role's permissions array include X?" There is no
+// more complicated rule engine than that on purpose (see the "allow-only,
+// no deny-rules" note in the Day 5 learning note for why).
+// ============================================================================
+
+// TYPESCRIPT NOTE: `as const` at the end of an object literal locks every
+// property to its EXACT string value (the type of PERMISSIONS.ORG_MANAGE
+// becomes the literal type "org.manage", not just "string"). This is what
+// makes `Permission` below a precise list of allowed strings instead of
+// "any string at all" - assigning `"typo.permission"` anywhere a
+// `Permission` is expected would be a compile error.
+export const PERMISSIONS = {
+  ORG_MANAGE: "org.manage", // rename the org, change time zone/business hours
+  MEMBER_INVITE: "member.invite", // invite a new person into the org
+  MEMBER_REMOVE: "member.remove", // remove an existing member
+  MEMBER_ROLE_UPDATE: "member.role.update", // change which role a member has
+  ROLE_MANAGE: "role.manage", // create/edit/delete custom roles
+  DEPARTMENT_MANAGE: "department.manage", // create/delete departments
+  TEAM_MANAGE: "team.manage", // create/delete teams
+  // These two are reserved, unused permission strings - they're the exact
+  // examples the SRS names for FUTURE modules (projects, support tickets)
+  // that don't exist yet. Listing them now means the permission catalog
+  // doesn't need to change shape later - only which modules check them.
+  PROJECT_CREATE: "project.create",
+  TICKET_ASSIGN: "ticket.assign",
+} as const;
+
+// TYPESCRIPT NOTE: `(typeof PERMISSIONS)[keyof typeof PERMISSIONS]` reads
+// as "the type of every VALUE in the PERMISSIONS object, unioned together."
+// Concretely, `Permission` becomes:
+//     "org.manage" | "member.invite" | "member.remove" | ... | "ticket.assign"
+// If someone adds a new line to PERMISSIONS above, this type updates
+// itself automatically - one source of truth, just like z.infer elsewhere.
+export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
+
+export const ALL_PERMISSIONS: Permission[] = Object.values(PERMISSIONS);
+
+/** One row in an organization's role list. */
+export interface RoleSummary {
+  id: string;
+  name: string;
+  permissions: Permission[];
+  // "Owner" and "Member" are created automatically for every new
+  // organization (see organization.service.ts) and can't be renamed or
+  // deleted - the frontend uses this flag to hide those actions for them.
+  isSystemRole: boolean;
+  createdAt: string;
+}
+
+export interface DepartmentSummary {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface TeamSummary {
+  id: string;
+  name: string;
+  departmentId?: string;
+  createdAt: string;
 }

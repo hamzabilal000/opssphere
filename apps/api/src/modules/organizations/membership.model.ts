@@ -4,20 +4,28 @@
 // A Membership is the "link" record between a User and an Organization -
 // same idea as a join table in SQL, just as its own Mongoose collection
 // here. It answers three questions at once for any (user, org) pair:
-// "are they even a member?", "what can they do here?" (role), and "do they
-// currently have access?" (status).
+// "are they even a member?", "what can they do here?" (roleId), and "do
+// they currently have access?" (status).
 //
 // THIS is the record tenant.middleware.ts checks on every organization-
 // scoped request - see that file for exactly how.
+//
+// DAY 5 CHANGE: this used to store `role: "owner" | "member"` directly -
+// just a fixed, two-choice label. Now it stores `roleId`, pointing at a
+// real Role document (role.model.ts) that carries an actual permissions
+// list. This is what makes CUSTOM roles possible - a Membership doesn't
+// care whether the role it points to is one of the built-in "Owner" /
+// "Member" roles or something an admin invented themselves; the lookup
+// works the same way either way.
 // ============================================================================
 
 import mongoose, { Schema, Types, type HydratedDocument } from "mongoose";
-import type { MembershipRole, MembershipStatus } from "@opssphere/shared-types";
+import type { MembershipStatus } from "@opssphere/shared-types";
 
 export interface MembershipAttrs {
   organizationId: Types.ObjectId;
   userId: Types.ObjectId;
-  role: MembershipRole;
+  roleId: Types.ObjectId;
   status: MembershipStatus;
   createdAt: Date;
 }
@@ -28,7 +36,7 @@ const membershipSchema = new Schema<MembershipAttrs>(
   {
     organizationId: { type: Schema.Types.ObjectId, ref: "Organization", required: true, index: true },
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
-    role: { type: String, enum: ["owner", "member"], required: true },
+    roleId: { type: Schema.Types.ObjectId, ref: "Role", required: true },
     status: { type: String, enum: ["active", "suspended"], required: true, default: "active" },
   },
   { timestamps: { createdAt: true, updatedAt: false } }

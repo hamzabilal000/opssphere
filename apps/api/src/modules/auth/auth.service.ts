@@ -10,6 +10,16 @@
 import { User, type UserDocument } from "./user.model.js";
 import { Session } from "./session.model.js";
 import { Invitation } from "./invitation.model.js";
+// DAY 5: an org-scoped invitation (created in organization.service.ts's
+// createOrgInvitation) carries an organizationId + roleId - accepting one
+// needs to look those up to also create a Membership, not just a User.
+// Reaching into the organizations module from here is the same pattern
+// organization.service.ts already uses in reverse (it imports User from
+// this module) - this project doesn't enforce strict one-way module
+// boundaries, since everything still lives in one small API.
+import { Organization } from "../organizations/organization.model.js";
+import { Role } from "../organizations/role.model.js";
+import { Membership } from "../organizations/membership.model.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import {
   generateOneTimeToken,
@@ -346,7 +356,23 @@ export async function getInvitationPreview(rawToken: string): Promise<Invitation
     throw new ApiError(400, "INVALID_TOKEN", "This invitation is invalid or has expired.");
   }
 
-  return { email: invitation.email, expiresAt: invitation.expiresAt.toISOString() };
+  const preview: InvitationPreview = {
+    email: invitation.email,
+    expiresAt: invitation.expiresAt.toISOString(),
+  };
+
+  // DAY 5: only org-scoped invitations have these two fields set - a
+  // plain Day-3-style invitation leaves the preview as just email+expiry.
+  if (invitation.organizationId && invitation.roleId) {
+    const [org, role] = await Promise.all([
+      Organization.findById(invitation.organizationId),
+      Role.findById(invitation.roleId),
+    ]);
+    if (org) preview.organizationName = org.name;
+    if (role) preview.roleName = role.name;
+  }
+
+  return preview;
 }
 
 export async function acceptInvitation(
@@ -380,6 +406,19 @@ export async function acceptInvitation(
 
   invitation.status = "accepted";
   await invitation.save();
+
+  // DAY 5: if this invitation was created FROM an organization (it has
+  // organizationId + roleId set), accepting it doesn't just create a bare
+  // account - it also creates the Membership that actually gets them into
+  // that organization, with the exact role they were invited as.
+  if (invitation.organizationId && invitation.roleId) {
+    await Membership.create({
+      organizationId: invitation.organizationId,
+      userId: user._id,
+      roleId: invitation.roleId,
+      status: "active",
+    });
+  }
 
   const { accessToken, refreshToken } = await createSessionAndTokens(user._id.toString(), context);
   return { user: toAuthUser(user), accessToken, refreshToken };

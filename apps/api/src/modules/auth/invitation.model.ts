@@ -1,14 +1,18 @@
 // ============================================================================
 // WHAT THIS FILE DOES (in plain English)
 // ----------------------------------------------------------------------------
-// A super-simplified version of the invitation system described in the SRS
-// (full version arrives Day 5, once organizations and roles exist - see
-// SRS section 5.2). For now, this just answers: "someone who's logged in
-// can invite an email address; that person gets a link; clicking it lets
-// them set a password and creates their account, already verified."
+// Day 3 built a super-simplified invitation: "someone who's logged in can
+// invite an email address; that person gets a link; clicking it lets them
+// set a password and creates their account, already verified." No
+// organization, no role - just proving an account can be created THROUGH
+// an invitation instead of open self-registration.
 //
-// No organization, no role assignment yet - just proving an account can be
-// created THROUGH an invitation instead of through open self-registration.
+// DAY 5 CHANGE: `organizationId` and `roleId` are now OPTIONAL extra
+// fields. A plain, Day-3-style invitation still works exactly as before
+// (both left unset). An org-scoped invitation (created via
+// organization.service.ts's createOrgInvitation) sets both, so accepting
+// it not only creates the account but ALSO creates a Membership in that
+// organization with that role - see auth.service.ts's acceptInvitation.
 // ============================================================================
 
 import mongoose, { Schema, Types, type HydratedDocument } from "mongoose";
@@ -19,6 +23,8 @@ export interface InvitationAttrs {
   status: "pending" | "accepted" | "cancelled";
   invitedByUserId: Types.ObjectId;
   expiresAt: Date;
+  organizationId?: Types.ObjectId;
+  roleId?: Types.ObjectId;
   createdAt: Date;
 }
 
@@ -57,6 +63,14 @@ const invitationSchema = new Schema<InvitationAttrs>(
     expiresAt: {
       type: Date,
       required: true,
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: "Organization",
+    },
+    roleId: {
+      type: Schema.Types.ObjectId,
+      ref: "Role",
     },
   },
   {

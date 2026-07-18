@@ -17,6 +17,13 @@
 
 import { z } from "zod";
 
+// DAY 5: this package now also depends on @opssphere/shared-types, so the
+// role-creation schema below can check permission strings against the
+// SAME canonical PERMISSIONS list the rest of the app uses (see
+// shared-types/src/index.ts) - one list of valid permission strings,
+// reused everywhere, instead of retyping it here.
+import { PERMISSIONS } from "@opssphere/shared-types";
+
 // This describes the ?page=1&limit=25&sort=-dueDate part of a URL that
 // list endpoints (like GET /api/v1/tasks) will use starting Day 4+.
 //
@@ -145,3 +152,54 @@ export const createOrganizationSchema = z.object({
     .default({ start: "09:00", end: "17:00" }),
 });
 export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;
+
+// ============================================================================
+// DAY 5 — ROLES, DEPARTMENTS, TEAMS & ORG-SCOPED INVITATION SCHEMAS
+// ============================================================================
+
+// `z.enum(...)` needs an actual array of string literals, not just
+// `Permission[]` (a TypeScript type has no existence at runtime) - so we
+// spread PERMISSIONS' values into a real array here. The `as [string,
+// ...string[]]` cast tells Zod's types "trust me, there's at least one
+// element" (z.enum requires a non-empty tuple type) - PERMISSIONS will
+// always have entries, so this is safe.
+const permissionValues = Object.values(PERMISSIONS) as [string, ...string[]];
+
+export const createRoleSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(60, "Name is too long"),
+  permissions: z
+    .array(z.enum(permissionValues))
+    .min(1, "Choose at least one permission")
+    // z.enum + z.array doesn't stop someone sending the SAME permission
+    // twice - dedupe with a Set so a role's permissions list can't have
+    // silly repeats.
+    .transform((perms) => Array.from(new Set(perms))),
+});
+export type CreateRoleInput = z.infer<typeof createRoleSchema>;
+
+export const createDepartmentSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(80, "Name is too long"),
+});
+export type CreateDepartmentInput = z.infer<typeof createDepartmentSchema>;
+
+export const createTeamSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(80, "Name is too long"),
+  // A Mongo ObjectId is always exactly 24 hex characters - this regex is a
+  // cheap, useful sanity check before even asking the database.
+  departmentId: z
+    .string()
+    .regex(/^[0-9a-fA-F]{24}$/, "Invalid department id")
+    .optional(),
+});
+export type CreateTeamInput = z.infer<typeof createTeamSchema>;
+
+export const updateMembershipRoleSchema = z.object({
+  roleId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid role id"),
+});
+export type UpdateMembershipRoleInput = z.infer<typeof updateMembershipRoleSchema>;
+
+export const createOrgInvitationSchema = z.object({
+  email: z.string().email("Enter a valid email address").toLowerCase(),
+  roleId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid role id"),
+});
+export type CreateOrgInvitationInput = z.infer<typeof createOrgInvitationSchema>;

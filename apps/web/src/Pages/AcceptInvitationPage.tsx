@@ -27,6 +27,11 @@ export default function AcceptInvitationPage() {
 
   const [previewStatus, setPreviewStatus] = useState<"loading" | "ready" | "error">("loading");
   const [email, setEmail] = useState<string | null>(null);
+  // DAY 5: only set for an org-scoped invitation - a plain Day-3-style
+  // invitation leaves these both undefined/null, and the page just shows
+  // the generic "setting up an account" message below.
+  const [organizationName, setOrganizationName] = useState<string | null>(null);
+  const [roleName, setRoleName] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
   const [password, setPassword] = useState("");
@@ -43,6 +48,8 @@ export default function AcceptInvitationPage() {
     getInvitationPreview(token)
       .then((preview) => {
         setEmail(preview.email);
+        setOrganizationName(preview.organizationName ?? null);
+        setRoleName(preview.roleName ?? null);
         setPreviewStatus("ready");
       })
       .catch((err) => {
@@ -78,8 +85,15 @@ export default function AcceptInvitationPage() {
         {previewStatus === "ready" && (
           <>
             <p className="text-slate-500 mb-6 text-sm">
-              Setting up an account for <span className="font-medium text-slate-700">{email}</span>.
-              Choose a password to finish.
+              Setting up an account for <span className="font-medium text-slate-700">{email}</span>
+              {organizationName && (
+                <>
+                  {" "}
+                  to join <span className="font-medium text-slate-700">{organizationName}</span> as{" "}
+                  <span className="font-medium text-slate-700">{roleName}</span>
+                </>
+              )}
+              . Choose a password to finish.
             </p>
 
             <form onSubmit={handleSubmit}>

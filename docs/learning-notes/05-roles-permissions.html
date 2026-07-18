@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 05 — Roles & Permissions</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 5 OF 18</div>
+  <h1>Roles &amp; Permissions</h1>
+  <p class="sub">Access is controlled by real, testable permission checks — not by hiding a button
+  on the frontend and hoping nobody notices it's still reachable.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Day 4 gave every organization exactly two levels of access: "owner" or "member," hardcoded.
+Today replaces that with a real permission system - named permission strings (like
+<code>role.manage</code>), roles that are just a name plus a list of those strings, and a backend
+check on every sensitive action that actually enforces it. Along the way, organizations also gained
+Departments and Teams (simple groupings), and invitations now assign a real role instead of just
+creating a bare account.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every file involved has comments explaining what's new - especially
+  <code>tenant.middleware.ts</code>'s new <code>requirePermission</code> function, which is the
+  actual enforcement point for everything described below.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. Permissions are just strings - roles are just lists of them</h3>
+<p>A permission is nothing more than a short label for ONE specific action, e.g.
+<code>member.invite</code> or <code>role.manage</code>. The full list lives in one place -
+<code>PERMISSIONS</code> in <code>packages/shared-types</code> - so backend, frontend, and validation
+all agree on the exact same strings. A role is just a name plus an array of these strings. Checking
+"can this person do X?" always comes down to one question: "is X in their role's permissions array?"
+There's no hierarchy, no inheritance, no "deny" rules layered on top - the SRS explicitly says to skip
+those for the MVP, and a flat allow-list is genuinely enough for what OpsSphere needs right now.</p>
+
+<h3>2. System roles vs. custom roles</h3>
+<p>Every new organization automatically gets two roles the moment it's created: <b>Owner</b> (every
+permission that exists) and <b>Member</b> (no permissions - a safe, do-nothing baseline). These are
+"system roles" - the code refuses to let anyone rename or delete them, so an org can never end up with
+zero usable roles. Anything beyond those two is a <b>custom role</b> - an admin picks a name and
+checks off whichever permissions they want, and the system treats it exactly the same way as a
+built-in one everywhere else (role assignment, permission checks - there's no special-casing).</p>
+
+<h3>3. Membership now points at a Role, not a fixed label</h3>
+<p>Day 4's Membership stored <code>role: "owner" | "member"</code> directly - a fixed, two-choice
+field. Today it stores <code>roleId</code>, pointing at a real Role document instead. This one change
+is what makes custom roles possible: a Membership doesn't need to know or care whether the role it
+points to is "Owner," "Member," or some custom role an admin invented five minutes ago - the lookup
+works identically either way.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext"><b>You open an organization's details</b> and see its roles - "Owner" and "Member" already exist automatically.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>You create a custom role</b> - say, "Support Agent" - checking two permissions: <code>member.invite</code> and <code>team.manage</code>.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>You assign that role to a member</b> using the role dropdown next to their name - this calls <code>PATCH /organizations/:id/members/:membershipId</code>.</div></div>
+<div class="step"><div class="num">4</div><div class="stext"><b>That member tries an action their role DOES allow</b> (inviting someone) - <code>requirePermission("member.invite")</code> checks their role's permissions array, finds a match, and lets the request through.</div></div>
+<div class="step"><div class="num">5</div><div class="stext"><b>That member tries an action their role does NOT allow</b> (deleting a role, which needs <code>role.manage</code>) - the exact same middleware checks the array, finds no match, and rejects with a clean 403. This is the Day 5 acceptance test, working end to end.</div></div>
+<div class="step"><div class="num">6</div><div class="stext"><b>You invite someone new</b> from inside the organization, picking a role for them up front - accepting that invitation now creates BOTH their account AND their Membership with that exact role, in one step.</div></div>
+
+<h2>The new files, in one picture</h2>
+<pre><code>apps/api/src/modules/organizations/
+├── role.model.ts         <span style="color:#7be9d8">→ the MongoDB "roles" collection (name + permissions[])</span>
+├── department.model.ts    <span style="color:#7be9d8">→ simple named groupings within an org</span>
+├── team.model.ts           <span style="color:#7be9d8">→ smaller groups, optionally under a department</span>
+├── membership.model.ts      <span style="color:#7be9d8">→ UPDATED: role -> roleId (points at a real Role)</span>
+├── tenant.middleware.ts      <span style="color:#7be9d8">→ UPDATED: adds requirePermission(...)</span>
+├── organization.service.ts   <span style="color:#7be9d8">→ UPDATED: seeds Owner/Member, role/dept/team CRUD,</span>
+│                               <span style="color:#7be9d8">  member role updates, org-scoped invitations</span>
+├── organization.controller.ts <span style="color:#7be9d8">→ UPDATED: ~15 handlers now, same 3-step shape each</span>
+└── organization.routes.ts      <span style="color:#7be9d8">→ UPDATED: most writes chain requirePermission(...)</span>
+
+apps/api/src/modules/auth/
+├── invitation.model.ts    <span style="color:#7be9d8">→ UPDATED: optional organizationId + roleId</span>
+└── auth.service.ts         <span style="color:#7be9d8">→ UPDATED: accepting an org invite also creates a Membership</span>
+
+apps/web/src/Pages/
+├── DashboardPage.tsx        <span style="color:#7be9d8">→ UPDATED: roles/departments/teams panel, role assignment,</span>
+│                              <span style="color:#7be9d8">  org-scoped invite form</span>
+└── AcceptInvitationPage.tsx  <span style="color:#7be9d8">→ UPDATED: shows which org/role you're joining, if any</span></code></pre>
+
+<h2>A design detail worth understanding: two layers of protection, stacked</h2>
+<div class="callout amber">
+  <strong class="title">requireOrgMembership, then requirePermission - never just one</strong>
+  Every write route in <code>organization.routes.ts</code> chains THREE middlewares:
+  <code>requireAuth</code> (are you logged in), <code>requireOrgMembership</code> (are you a member of
+  THIS org), THEN <code>requirePermission(...)</code> (does your specific role allow THIS action).
+  Each one depends on data the previous one set on the request - <code>requirePermission</code> reads
+  <code>req.membershipPermissions</code>, which only <code>requireOrgMembership</code> sets, which is
+  why the order in each route definition matters and can never be shuffled.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>No deny-rules or permission overrides - a flat allow-list is all the SRS asks for at this
+  stage, and it's genuinely enough for what exists so far.</li>
+  <li>No role editing (rename or change permissions on an existing custom role) - only create and
+  delete. Renaming can wait; deleting and recreating covers the same need for now.</li>
+  <li>Inviting an email that already has an OpsSphere account (into a SECOND organization) isn't
+  supported yet - <code>createOrgInvitation</code> explicitly rejects this with a clear error rather
+  than silently doing the wrong thing. A reasonable Day 6+ improvement.</li>
+  <li>The frontend hides admin-ish buttons based on a simple guess (your role isn't literally named
+  "Member") - not a real permission check. That's fine, on purpose: see the SRS principle quoted in
+  the code, "hiding a button on the frontend is a UX nicety, never real security." The backend is
+  what actually enforces everything.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> (packages/validation gained a new workspace dependency today -
+  worth re-running even though no new npm packages were added).</li>
+  <li>Run <code>pnpm dev</code>, log in, open an organization's details.</li>
+  <li>Create a custom role with just <code>member.invite</code> checked, and assign it to a second
+  test account (invite yourself with a "+alias" email, e.g. <code>you+test@gmail.com</code>, and
+  accept it in an incognito window).</li>
+  <li>Log in as that second account, open the same org, and try creating a role or department -
+  confirm you get a clean "you don't have permission" error, since only <code>member.invite</code>
+  was granted.</li>
+  <li>Back in your original account, create a Department and a Team, and assign the team to that
+  department.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every file (shared-types, validation, api, web) compiles with no TypeScript errors (checked in a sandbox copy)</td><td>✅ Confirmed</td></tr>
+  <tr><td>All permission-gated write routes (roles, departments, teams, member role updates, org invitations) correctly reject requests with no login cookie</td><td>✅ Confirmed (401, tested without a database)</td></tr>
+  <tr><td>Read routes (roles list) also correctly require at least membership</td><td>✅ Confirmed</td></tr>
+  <tr><td>The full custom-role-creation → assignment → clean-403-on-missing-permission flow, against a real database</td><td>⏳ Needs you to test it locally (see steps above)</td></tr>
+  <tr><td>The "last owner can't demote themselves" rule, and the org-scoped invitation → accept → Membership flow</td><td>⏳ Needs you to test it locally</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Day 6 is the first frontend-focused day: a real app shell (navigation, layout, an actual design
+system) replacing the plain forms-on-a-page look used since Day 2. All the roles/permissions/org
+groundwork from today becomes what that navigation is actually built around.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 05 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

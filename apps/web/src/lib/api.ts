@@ -6,6 +6,9 @@ import type {
   InvitationPreview,
   OrganizationSummary,
   MembershipSummary,
+  RoleSummary,
+  DepartmentSummary,
+  TeamSummary,
 } from "@opssphere/shared-types";
 import type {
   RegisterInput,
@@ -14,6 +17,10 @@ import type {
   ResetPasswordInput,
   CreateInvitationInput,
   CreateOrganizationInput,
+  CreateRoleInput,
+  CreateDepartmentInput,
+  CreateTeamInput,
+  CreateOrgInvitationInput,
 } from "@opssphere/validation";
 
 /**
@@ -143,4 +150,83 @@ export function listOrganizationMembers(
   organizationId: string
 ): Promise<{ members: MembershipSummary[] }> {
   return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/members`);
+}
+
+// ============================================================================
+// DAY 5 — ROLES, DEPARTMENTS, TEAMS & ORG-SCOPED INVITATIONS
+// ----------------------------------------------------------------------------
+// Same wrapper, same pattern, one new idea: every one of these calls can
+// come back with a 403 FORBIDDEN if the logged-in user's role doesn't have
+// the matching permission - apiRequest already turns that into a thrown
+// Error (see the `if (!body.success) throw ...` above), so callers just
+// need an ordinary try/catch, same as any other error.
+// ============================================================================
+
+export function updateMemberRole(organizationId: string, membershipId: string, roleId: string): Promise<null> {
+  return apiRequest(
+    `/organizations/${encodeURIComponent(organizationId)}/members/${encodeURIComponent(membershipId)}`,
+    { method: "PATCH", body: { roleId } }
+  );
+}
+
+export function listRoles(organizationId: string): Promise<{ roles: RoleSummary[] }> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/roles`);
+}
+
+export function createRole(organizationId: string, input: CreateRoleInput): Promise<{ role: RoleSummary }> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/roles`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function deleteRole(organizationId: string, roleId: string): Promise<null> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/roles/${encodeURIComponent(roleId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function listDepartments(organizationId: string): Promise<{ departments: DepartmentSummary[] }> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/departments`);
+}
+
+export function createDepartment(
+  organizationId: string,
+  input: CreateDepartmentInput
+): Promise<{ department: DepartmentSummary }> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/departments`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function deleteDepartment(organizationId: string, departmentId: string): Promise<null> {
+  return apiRequest(
+    `/organizations/${encodeURIComponent(organizationId)}/departments/${encodeURIComponent(departmentId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export function listTeams(organizationId: string): Promise<{ teams: TeamSummary[] }> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/teams`);
+}
+
+export function createTeam(organizationId: string, input: CreateTeamInput): Promise<{ team: TeamSummary }> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/teams`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function deleteTeam(organizationId: string, teamId: string): Promise<null> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/teams/${encodeURIComponent(teamId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function createOrgInvitation(organizationId: string, input: CreateOrgInvitationInput): Promise<null> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/invitations`, {
+    method: "POST",
+    body: input,
+  });
 }
