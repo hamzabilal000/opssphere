@@ -12,6 +12,9 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { resetPassword } from "../lib/api";
+import { Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
 
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams();
@@ -42,7 +45,7 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg shadow-sm p-8">
+      <Card className="max-w-md w-full p-8">
         <h1 className="text-2xl font-bold text-slate-900 mb-1">Choose a new password</h1>
         <p className="text-slate-500 mb-6 text-sm">
           This will replace your old password immediately. You'll be logged out of every device.
@@ -56,32 +59,28 @@ export default function ResetPasswordPage() {
 
         <form onSubmit={handleSubmit}>
           <label className="block text-sm font-medium text-slate-700 mb-1">New password</label>
-          <input
+          <Input
             type="password"
             required
             minLength={8}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full border border-slate-300 rounded-md px-3 py-2 mb-2 text-sm"
+            className="mb-2"
           />
 
           {error && <p className="text-red-600 text-sm mb-4">{error}</p>}
 
-          <button
-            type="submit"
-            disabled={loading || !token}
-            className="w-full bg-slate-900 text-white rounded-md py-2 text-sm font-medium disabled:opacity-50"
-          >
+          <Button type="submit" disabled={loading || !token} className="w-full">
             {loading ? "Resetting…" : "Reset password"}
-          </button>
+          </Button>
         </form>
 
         <p className="text-sm text-slate-500 mt-4 text-center">
-          <Link to="/login" className="text-blue-600 underline">
+          <Link to="/login" className="text-brand-blue underline">
             Back to log in
           </Link>
         </p>
-      </div>
+      </Card>
     </div>
   );
 }

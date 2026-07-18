@@ -146,6 +146,14 @@ export function listOrganizations(): Promise<{ organizations: OrganizationSummar
   return apiRequest("/organizations");
 }
 
+// DAY 6: previously unused from the frontend's side - the backend route
+// has existed since Day 4 (see organization.routes.ts), but every page
+// until now only ever needed the LIST of organizations, never one on its
+// own. OrganizationDetailPage.tsx is the first page that does.
+export function getOrganization(organizationId: string): Promise<{ organization: OrganizationSummary }> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}`);
+}
+
 export function listOrganizationMembers(
   organizationId: string
 ): Promise<{ members: MembershipSummary[] }> {

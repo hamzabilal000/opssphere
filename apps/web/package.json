@@ -14,9 +14,11 @@
     "@opssphere/shared-types": "workspace:*",
     "@opssphere/validation": "workspace:*",
     "@tanstack/react-query": "^5.56.0",
+    "lucide-react": "^0.446.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-router-dom": "^6.26.0"
+    "react-router-dom": "^6.26.0",
+    "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@opssphere/eslint-config": "workspace:*",

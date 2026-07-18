@@ -12,6 +12,7 @@ import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom"; // same BrowserRouter you already use
 import App from "./App";
+import { ToastProvider } from "./components/ui/Toast"; // DAY 6: shared toast notifications
 import "./index.css"; // Tailwind's generated styles get pulled in here
 
 // ----------------------------------------------------------------------------
@@ -24,8 +25,10 @@ import "./index.css"; // Tailwind's generated styles get pulled in here
 // TanStack Query does that same job for you automatically — given a fetch
 // function, it gives you back `{ data, isLoading, isError }` without you
 // writing useEffect/useState boilerplate every time, and it also caches
-// results so you don't refetch the same data over and over. You'll see it
-// in action in App.tsx below (the `useQuery` call).
+// results so you don't refetch the same data over and over. DAY 6 is where
+// this actually gets used for real — see src/lib/queries.ts for every
+// `useQuery`/`useMutation` call in the app, all built on the ONE client
+// created below.
 //
 // `QueryClient` is just the "engine" that manages all of this caching —
 // you create ONE for your whole app (here) and every component can then
@@ -49,7 +52,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           same as wrapping <App /> in your Pages-based projects, just done
           here instead of inside App.tsx. */}
       <BrowserRouter>
-        <App />
+        {/* DAY 6: ToastProvider wraps the whole app ONCE, here, so any
+            page/component can call useToast() no matter how deep it is. */}
+        <ToastProvider>
+          <App />
+        </ToastProvider>
       </BrowserRouter>
     </QueryClientProvider>
   </React.StrictMode>

@@ -20,6 +20,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { getInvitationPreview, acceptInvitation } from "../lib/api";
+import { Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
+import { LoadingState } from "../components/ui/States";
 
 export default function AcceptInvitationPage() {
   const [searchParams] = useSearchParams();
@@ -75,10 +79,10 @@ export default function AcceptInvitationPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg shadow-sm p-8">
+      <Card className="max-w-md w-full p-8">
         <h1 className="text-2xl font-bold text-slate-900 mb-1">Accept your invitation</h1>
 
-        {previewStatus === "loading" && <p className="text-slate-400 text-sm">Loading invitation…</p>}
+        {previewStatus === "loading" && <LoadingState label="Loading invitation…" />}
 
         {previewStatus === "error" && <p className="text-red-600 text-sm">{previewError}</p>}
 
@@ -98,28 +102,24 @@ export default function AcceptInvitationPage() {
 
             <form onSubmit={handleSubmit}>
               <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
-              <input
+              <Input
                 type="password"
                 required
                 minLength={8}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full border border-slate-300 rounded-md px-3 py-2 mb-2 text-sm"
+                className="mb-2"
               />
 
               {submitError && <p className="text-red-600 text-sm mb-4">{submitError}</p>}
 
-              <button
-                type="submit"
-                disabled={submitting}
-                className="w-full bg-slate-900 text-white rounded-md py-2 text-sm font-medium disabled:opacity-50"
-              >
+              <Button type="submit" disabled={submitting} className="w-full">
                 {submitting ? "Creating account…" : "Create account"}
-              </button>
+              </Button>
             </form>
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

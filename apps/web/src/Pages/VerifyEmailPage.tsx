@@ -11,6 +11,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { verifyEmail } from "../lib/api";
+import { Card } from "../components/ui/Card";
+import { LoadingState } from "../components/ui/States";
 
 export default function VerifyEmailPage() {
   // useSearchParams is react-router's way of reading ?query=params from the
@@ -61,14 +63,14 @@ export default function VerifyEmailPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg shadow-sm p-8 text-center">
-        {status === "checking" && <p className="text-slate-400">Verifying your email…</p>}
+      <Card className="max-w-md w-full p-8 text-center">
+        {status === "checking" && <LoadingState label="Verifying your email…" />}
 
         {status === "success" && (
           <>
             <h1 className="text-2xl font-bold text-slate-900 mb-2">Email verified</h1>
             <p className="text-slate-500 mb-6">Your account is ready. You can log in now.</p>
-            <Link to="/login" className="text-blue-600 underline text-sm">
+            <Link to="/login" className="text-brand-blue underline text-sm">
               Go to login
             </Link>
           </>
@@ -80,7 +82,7 @@ export default function VerifyEmailPage() {
             <p className="text-red-600 text-sm">{error}</p>
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

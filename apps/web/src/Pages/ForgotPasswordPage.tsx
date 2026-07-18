@@ -12,6 +12,9 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { forgotPassword } from "../lib/api";
+import { Card } from "../components/ui/Card";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -36,7 +39,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
-      <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg shadow-sm p-8">
+      <Card className="max-w-md w-full p-8">
         <h1 className="text-2xl font-bold text-slate-900 mb-1">Forgot your password?</h1>
         <p className="text-slate-500 mb-6 text-sm">
           Enter your email and we'll send you a link to reset it.
@@ -46,7 +49,7 @@ export default function ForgotPasswordPage() {
           <p className="text-sm text-slate-700 bg-slate-50 border border-slate-200 rounded-md p-4">
             If an account with that email exists, a reset link has been sent. Check your inbox
             (in development, that's Mailpit at{" "}
-            <a href="http://localhost:8025" className="text-blue-600 underline">
+            <a href="http://localhost:8025" className="text-brand-blue underline">
               localhost:8025
             </a>
             ).
@@ -54,31 +57,27 @@ export default function ForgotPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-            <input
+            <Input
               type="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-slate-300 rounded-md px-3 py-2 mb-4 text-sm"
+              className="mb-4"
               placeholder="you@example.com"
             />
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-slate-900 text-white rounded-md py-2 text-sm font-medium disabled:opacity-50"
-            >
+            <Button type="submit" disabled={loading} className="w-full">
               {loading ? "Sending…" : "Send reset link"}
-            </button>
+            </Button>
           </form>
         )}
 
         <p className="text-sm text-slate-500 mt-4 text-center">
-          <Link to="/login" className="text-blue-600 underline">
+          <Link to="/login" className="text-brand-blue underline">
             Back to log in
           </Link>
         </p>
-      </div>
+      </Card>
     </div>
   );
 }
