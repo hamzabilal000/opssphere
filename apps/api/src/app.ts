@@ -31,6 +31,7 @@ import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
+import { organizationRouter } from "./modules/organizations/organization.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 // TYPESCRIPT NOTE: `export function createApp() { ... }` — a totally normal
@@ -98,6 +99,7 @@ export function createApp() {
   // the same way auth was added on Day 2.
   app.use("/api/v1/health", healthRouter);
   app.use("/api/v1/auth", authRouter);
+  app.use("/api/v1/organizations", organizationRouter);
 
   // If NOTHING above matched the request's URL, this runs (see
   // middleware/errorHandler.ts for what it does).

@@ -110,3 +110,38 @@ export const acceptInvitationSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
+
+// ============================================================================
+// DAY 4 — ORGANIZATION SCHEMA
+// ============================================================================
+
+// A simple "HH:MM, 24-hour clock" check, e.g. "09:00" or "17:30" - good
+// enough for Day 4's "business hours" field without pulling in a whole
+// date/time library just for two text fields.
+const timeOfDaySchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use 24-hour HH:MM format, e.g. 09:00");
+
+export const createOrganizationSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(80, "Name is too long"),
+
+  // The slug is the short, URL-safe identifier for the org (e.g.
+  // "acme-inc"). We ask the user to pick it directly (rather than
+  // generating one from the name) so Day 4 stays simple - no slug-collision
+  // auto-renaming logic needed yet.
+  slug: z
+    .string()
+    .min(2, "Slug must be at least 2 characters")
+    .max(40, "Slug is too long")
+    .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "Use lowercase letters, numbers, and hyphens only"),
+
+  timeZone: z.string().min(1, "Time zone is required").default("UTC"),
+
+  businessHours: z
+    .object({
+      start: timeOfDaySchema,
+      end: timeOfDaySchema,
+    })
+    .default({ start: "09:00", end: "17:00" }),
+});
+export type CreateOrganizationInput = z.infer<typeof createOrganizationSchema>;

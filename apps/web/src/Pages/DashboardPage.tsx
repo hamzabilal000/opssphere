@@ -15,8 +15,18 @@
 
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getMe, logoutUser, listSessions, revokeSession, revokeOtherSessions, createInvitation } from "../lib/api";
-import type { AuthUser, SessionSummary } from "@opssphere/shared-types";
+import {
+  getMe,
+  logoutUser,
+  listSessions,
+  revokeSession,
+  revokeOtherSessions,
+  createInvitation,
+  listOrganizations,
+  createOrganization,
+  listOrganizationMembers,
+} from "../lib/api";
+import type { AuthUser, SessionSummary, OrganizationSummary, MembershipSummary } from "@opssphere/shared-types";
 
 export default function DashboardPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -29,6 +39,19 @@ export default function DashboardPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState<string | null>(null);
   const [inviteSending, setInviteSending] = useState(false);
+
+  const [organizations, setOrganizations] = useState<OrganizationSummary[]>([]);
+  const [orgsLoading, setOrgsLoading] = useState(true);
+  const [orgName, setOrgName] = useState("");
+  const [orgSlug, setOrgSlug] = useState("");
+  const [orgCreating, setOrgCreating] = useState(false);
+  const [orgError, setOrgError] = useState<string | null>(null);
+
+  // Which org's member list is currently expanded, plus a simple cache so
+  // re-expanding the same org doesn't re-fetch every time.
+  const [expandedOrgId, setExpandedOrgId] = useState<string | null>(null);
+  const [membersByOrgId, setMembersByOrgId] = useState<Record<string, MembershipSummary[]>>({});
+  const [membersLoading, setMembersLoading] = useState(false);
 
   useEffect(() => {
     getMe()
@@ -51,6 +74,17 @@ export default function DashboardPage() {
       .catch(() => setSessions([]))
       .finally(() => setSessionsLoading(false));
   }, []);
+
+  // DAY 4: load "your organizations" the same way - independently, so a
+  // failure here doesn't block the rest of the dashboard either.
+  useEffect(() => {
+    refreshOrganizations().finally(() => setOrgsLoading(false));
+  }, []);
+
+  async function refreshOrganizations() {
+    const res = await listOrganizations().catch(() => ({ organizations: [] as OrganizationSummary[] }));
+    setOrganizations(res.organizations);
+  }
 
   async function refreshSessions() {
     const res = await listSessions().catch(() => ({ sessions: [] as SessionSummary[] }));
@@ -85,6 +119,48 @@ export default function DashboardPage() {
     } finally {
       setInviteSending(false);
     }
+  }
+
+  async function handleCreateOrg(e: React.FormEvent) {
+    e.preventDefault();
+    setOrgCreating(true);
+    setOrgError(null);
+    try {
+      // TYPESCRIPT NOTE: CreateOrganizationInput is inferred from the
+      // schema's OUTPUT shape (after Zod fills in defaults), so timeZone
+      // and businessHours are typed as required here even though the
+      // backend would happily fill them in itself if we omitted them.
+      // Simplest fix: just send the same defaults explicitly from here too.
+      await createOrganization({
+        name: orgName,
+        slug: orgSlug,
+        timeZone: "UTC",
+        businessHours: { start: "09:00", end: "17:00" },
+      });
+      setOrgName("");
+      setOrgSlug("");
+      await refreshOrganizations();
+    } catch (err) {
+      setOrgError((err as Error).message);
+    } finally {
+      setOrgCreating(false);
+    }
+  }
+
+  async function handleToggleMembers(organizationId: string) {
+    if (expandedOrgId === organizationId) {
+      setExpandedOrgId(null);
+      return;
+    }
+    setExpandedOrgId(organizationId);
+    if (membersByOrgId[organizationId]) return; // already cached, no need to re-fetch
+
+    setMembersLoading(true);
+    const res = await listOrganizationMembers(organizationId).catch(() => ({
+      members: [] as MembershipSummary[],
+    }));
+    setMembersByOrgId((prev) => ({ ...prev, [organizationId]: res.members }));
+    setMembersLoading(false);
   }
 
   if (loading) {
@@ -126,6 +202,93 @@ export default function DashboardPage() {
         >
           Log out
         </button>
+      </div>
+
+      {/* DAY 4: organizations */}
+      <div className="max-w-md w-full bg-white border border-slate-200 rounded-lg shadow-sm p-8">
+        <h2 className="text-lg font-bold text-slate-900 mb-1">Your organizations</h2>
+        <p className="text-slate-500 mb-4 text-sm">
+          Every company workspace you belong to. Data in one is never visible from another.
+        </p>
+
+        {orgsLoading ? (
+          <p className="text-slate-400 text-sm">Loading organizations…</p>
+        ) : organizations.length === 0 ? (
+          <p className="text-slate-400 text-sm mb-4">You're not part of an organization yet.</p>
+        ) : (
+          <ul className="space-y-2 mb-4">
+            {organizations.map((org) => (
+              <li key={org.id} className="border border-slate-200 rounded-md p-3 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="font-medium text-slate-700">
+                      {org.name} <span className="text-slate-400">({org.slug})</span>
+                    </p>
+                    <p className="text-slate-400">
+                      Your role: {org.myRole} · {org.timeZone} · {org.businessHours.start}–
+                      {org.businessHours.end}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleToggleMembers(org.id)}
+                    className="shrink-0 text-slate-700 border border-slate-300 rounded px-2 py-1"
+                  >
+                    {expandedOrgId === org.id ? "Hide members" : "View members"}
+                  </button>
+                </div>
+
+                {expandedOrgId === org.id && (
+                  <div className="mt-3 border-t border-slate-200 pt-3">
+                    {membersLoading && !membersByOrgId[org.id] ? (
+                      <p className="text-slate-400">Loading members…</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {(membersByOrgId[org.id] ?? []).map((m) => (
+                          <li key={m.id} className="text-slate-600">
+                            {m.email} — {m.role}
+                            {m.status === "suspended" ? " (suspended)" : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <form onSubmit={handleCreateOrg} className="border-t border-slate-200 pt-4">
+          <p className="text-sm font-medium text-slate-700 mb-2">Create a new organization</p>
+          <input
+            type="text"
+            required
+            value={orgName}
+            onChange={(e) => setOrgName(e.target.value)}
+            placeholder="Organization name"
+            className="w-full border border-slate-300 rounded-md px-3 py-2 mb-2 text-sm"
+          />
+          <input
+            type="text"
+            required
+            value={orgSlug}
+            onChange={(e) => setOrgSlug(e.target.value.toLowerCase())}
+            placeholder="url-slug-like-this"
+            pattern="[a-z0-9]+(-[a-z0-9]+)*"
+            title="Lowercase letters, numbers, and hyphens only"
+            className="w-full border border-slate-300 rounded-md px-3 py-2 mb-2 text-sm"
+          />
+
+          {orgError && <p className="text-red-600 text-sm mb-2">{orgError}</p>}
+
+          <button
+            type="submit"
+            disabled={orgCreating}
+            className="w-full bg-slate-900 text-white rounded-md py-2 text-sm font-medium disabled:opacity-50"
+          >
+            {orgCreating ? "Creating…" : "Create organization"}
+          </button>
+        </form>
       </div>
 
       {/* DAY 3: sessions ("where you're logged in") */}

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 04 — Organizations & Multi-Tenancy</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 4 OF 18</div>
+  <h1>Organizations &amp; Multi-Tenancy</h1>
+  <p class="sub">Every company gets its own isolated workspace — and today's whole job is proving
+  that isolation is real, not just assumed.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Up to now, OpsSphere only knew about individual users. Today it learns about
+<b>organizations</b> — company workspaces — and the rule that everything from here forward has to
+follow: a user logged into one company's workspace can never see or touch another company's data,
+even if they try to. Everything else in the app (projects, tickets, teams — starting Day 5 onward)
+will belong to an organization and lean on the isolation rule built today.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every file involved has comments explaining what's new — especially
+  <code>tenant.middleware.ts</code>, which is the single most important file added today.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. Multi-tenancy — many companies, one app, zero cross-over</h3>
+<p>"Tenant" is just a fancy word for "one company's workspace." Multi-tenancy means many tenants
+share the exact same running server and the exact same database — there's no separate copy of the
+app per customer. The upside is one codebase to maintain; the risk is that a bug could accidentally
+let one company see another's data. Today's whole job is closing that risk off at the ground floor,
+before any real business data (projects, tickets, etc.) exists to leak.</p>
+
+<h3>2. Organization vs. Membership — the workspace vs. your place in it</h3>
+<p>An <code>Organization</code> is the company itself (name, slug, time zone, business hours) — it
+doesn't know or care about any particular person. A <code>Membership</code> is the separate record
+that says "this specific user belongs to this specific organization, with this role." One person can
+have memberships in several organizations; one organization has many memberships. This is the exact
+same idea as a join table if you've used SQL before — just its own MongoDB collection here.</p>
+
+<h3>3. The golden rule — never trust an organization id from the client</h3>
+<p>Every organization-scoped URL looks like <code>/api/v1/organizations/:organizationId/...</code>.
+Here's the catch: that <code>:organizationId</code> is just text in a URL — anyone could edit it in
+their browser to a different company's real ID while still logged in as themselves. If the server
+just believed whatever ID showed up in the URL, that would be a serious data leak. Instead, EVERY
+request to one of these URLs is checked against a real <code>Membership</code> row in the database
+first — "does this exact user actually belong to this exact organization?" — before anything else in
+the request is allowed to run. See <code>tenant.middleware.ts</code>'s <code>requireOrgMembership</code>
+function for exactly how.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext"><b>You fill out "Create a new organization"</b> on the dashboard — just a name and a slug (the short, URL-safe id, e.g. <code>acme-inc</code>).</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>The backend checks the slug is free.</b> Slugs are unique across the whole app — MongoDB itself would also reject a duplicate as a backstop, even if two people tried to grab the same one at the exact same instant.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>The Organization is created</b>, and a Membership row is created right alongside it, making you its first <code>owner</code>.</div></div>
+<div class="step"><div class="num">4</div><div class="stext"><b>The dashboard lists every org you belong to</b>, with your role in each one shown next to it.</div></div>
+<div class="step"><div class="num">5</div><div class="stext"><b>Clicking "View members"</b> calls <code>GET /organizations/:id/members</code> — a request that goes THROUGH the tenant-context middleware, proving you're actually a member before any member list is returned.</div></div>
+<div class="step"><div class="num">6</div><div class="stext"><b>The isolation test:</b> if you were somehow logged in to Org A and tried editing the URL to Org B's real ID, the membership lookup for (you, Org B) simply finds nothing, and you're rejected with a 403 — before any Org B data is ever read.</div></div>
+
+<h2>The new files, in one picture</h2>
+<pre><code>apps/api/src/modules/organizations/
+├── organization.model.ts    <span style="color:#7be9d8">→ the MongoDB "organizations" collection</span>
+├── membership.model.ts       <span style="color:#7be9d8">→ the (user, org, role, status) link collection</span>
+├── tenant.middleware.ts       <span style="color:#7be9d8">→ THE isolation check — see above</span>
+├── organization.service.ts    <span style="color:#7be9d8">→ create / list / get org, list members</span>
+├── organization.controller.ts <span style="color:#7be9d8">→ turns HTTP requests into service calls</span>
+└── organization.routes.ts      <span style="color:#7be9d8">→ wires URLs to the controller (some routes need</span>
+                                  <span style="color:#7be9d8">  requireOrgMembership, some don't — see the file)</span>
+
+apps/web/src/Pages/DashboardPage.tsx <span style="color:#7be9d8">→ UPDATED: "Your organizations" panel + create form</span></code></pre>
+
+<h2>A design detail worth understanding: two different route "shapes"</h2>
+<div class="callout amber">
+  <strong class="title">Not every organization route needs the same protection</strong>
+  <code>POST /organizations</code> and <code>GET /organizations</code> (create one, list mine) only
+  need "are you logged in at all" — there's no specific org to check membership against yet.
+  <code>GET /organizations/:organizationId</code> and its <code>/members</code> route need a SECOND
+  check: "are you logged in AND a member of THIS one." That's why <code>organization.routes.ts</code>
+  chains two middlewares — <code>requireAuth</code>, then <code>requireOrgMembership</code> — only on
+  the routes that have a specific organization in the URL.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>Roles are just <code>owner</code> / <code>member</code> for now — the real permission system
+  (named permission strings like <code>project.create</code>, bundled into custom roles) is Day 5.</li>
+  <li>No way yet to remove a member, promote/demote someone, or leave an organization — those need
+  the role rules Day 5 introduces first (e.g. "the last owner can't demote themselves").</li>
+  <li>No "switch organization" concept — if you belong to several orgs, you see all of them on the
+  dashboard at once; there's no single "active" organization to switch between yet.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> (no new packages today, but harmless to re-run).</li>
+  <li>Run <code>pnpm dev</code>, log in.</li>
+  <li>On the dashboard, create an organization (pick any name/slug).</li>
+  <li>Click "View members" — you should see just yourself, listed as <code>owner</code>.</li>
+  <li>Create a second organization with a different slug — confirm both show up, each with you as
+  <code>owner</code>, and that each one's member list only ever shows that one org's members.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every file (shared-types, validation, api, web) compiles with no TypeScript errors (checked in a sandbox copy)</td><td>✅ Confirmed</td></tr>
+  <tr><td>All four organization routes correctly reject requests with no login cookie (401, tested without a database)</td><td>✅ Confirmed</td></tr>
+  <tr><td>A request with a well-formed but invalid login cookie is rejected before touching the database</td><td>✅ Confirmed</td></tr>
+  <tr><td>The full create → list → view-members flow, and the cross-org isolation test, against a real database</td><td>⏳ Needs you to test it locally (see steps above)</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Day 5 builds the real permission system on top of today's Membership model: named permission
+strings, roles as bundles of them, and the rules around changing someone's role (like "the last owner
+can't demote themselves").</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 04 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

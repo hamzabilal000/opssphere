@@ -137,3 +137,43 @@ export interface InvitationPreview {
   email: string;
   expiresAt: string;
 }
+
+// ============================================================================
+// DAY 4 — ORGANIZATIONS & MULTI-TENANCY TYPES
+// ----------------------------------------------------------------------------
+// "Multi-tenancy" just means: many companies ("tenants") share the same
+// running app and the same database, but each one's data is walled off from
+// every other one. An Organization is one company's workspace. A Membership
+// is the link saying "this user belongs to this organization, with this role."
+// ============================================================================
+
+/** Only two roles for now - the full permission system (project.create,
+ * ticket.assign, etc) is a Day 5 feature. Every org needs exactly one
+ * concept today: "can this person manage the org itself, or not." */
+export type MembershipRole = "owner" | "member";
+
+/** A suspended member keeps their account but loses access to this ONE
+ * organization - see tenant.middleware.ts for where this gets enforced. */
+export type MembershipStatus = "active" | "suspended";
+
+/** One row in "your organizations" - note `myRole`, which is the CURRENT
+ * user's role in THIS org, not a general property of the org itself. */
+export interface OrganizationSummary {
+  id: string;
+  name: string;
+  slug: string;
+  timeZone: string;
+  businessHours: { start: string; end: string };
+  createdAt: string;
+  myRole: MembershipRole;
+}
+
+/** One row in an organization's member list. */
+export interface MembershipSummary {
+  id: string;
+  userId: string;
+  email: string;
+  role: MembershipRole;
+  status: MembershipStatus;
+  joinedAt: string;
+}

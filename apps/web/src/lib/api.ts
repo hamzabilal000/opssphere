@@ -1,10 +1,19 @@
-import type { ApiResponse, AuthUser, HealthStatus, SessionSummary, InvitationPreview } from "@opssphere/shared-types";
+import type {
+  ApiResponse,
+  AuthUser,
+  HealthStatus,
+  SessionSummary,
+  InvitationPreview,
+  OrganizationSummary,
+  MembershipSummary,
+} from "@opssphere/shared-types";
 import type {
   RegisterInput,
   LoginInput,
   ForgotPasswordInput,
   ResetPasswordInput,
   CreateInvitationInput,
+  CreateOrganizationInput,
 } from "@opssphere/validation";
 
 /**
@@ -114,4 +123,24 @@ export function acceptInvitation(token: string, password: string): Promise<{ use
     method: "POST",
     body: { password },
   });
+}
+
+// ============================================================================
+// DAY 4 — ORGANIZATIONS API CALLS
+// ============================================================================
+
+export function createOrganization(
+  input: CreateOrganizationInput
+): Promise<{ organization: OrganizationSummary }> {
+  return apiRequest("/organizations", { method: "POST", body: input });
+}
+
+export function listOrganizations(): Promise<{ organizations: OrganizationSummary[] }> {
+  return apiRequest("/organizations");
+}
+
+export function listOrganizationMembers(
+  organizationId: string
+): Promise<{ members: MembershipSummary[] }> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/members`);
 }
