@@ -32,6 +32,7 @@ import { logger } from "./lib/logger.js";
 import { healthRouter } from "./modules/health/health.routes.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { organizationRouter } from "./modules/organizations/organization.routes.js";
+import { projectRouter } from "./modules/projects/project.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 // TYPESCRIPT NOTE: `export function createApp() { ... }` — a totally normal
@@ -100,6 +101,11 @@ export function createApp() {
   app.use("/api/v1/health", healthRouter);
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/organizations", organizationRouter);
+  // DAY 7: mounted at the SAME base path as organizationRouter, on
+  // purpose - see the big comment at the top of project.routes.ts for why
+  // this is a separate router instead of more routes crammed into
+  // organization.routes.ts.
+  app.use("/api/v1/organizations", projectRouter);
 
   // If NOTHING above matched the request's URL, this runs (see
   // middleware/errorHandler.ts for what it does).

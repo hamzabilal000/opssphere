@@ -12,7 +12,7 @@
 
 import { useEffect } from "react";
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Building2, Monitor, UserCircle, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Building2, FolderKanban, Monitor, UserCircle, ChevronDown } from "lucide-react";
 import { useOrganizationsQuery } from "../../lib/queries";
 import { useActiveOrgStore } from "../../store/activeOrgStore";
 
@@ -87,10 +87,21 @@ export function Sidebar() {
         {activeOrganizationId && (
           <NavLink
             to={`/dashboard/organizations/${activeOrganizationId}`}
+            end
             className={({ isActive }) => `${NAV_LINK_BASE} ${isActive ? NAV_LINK_ACTIVE : ""}`}
           >
             <Building2 className="w-4 h-4" />
             Organization
+          </NavLink>
+        )}
+
+        {activeOrganizationId && (
+          <NavLink
+            to={`/dashboard/organizations/${activeOrganizationId}/projects`}
+            className={({ isActive }) => `${NAV_LINK_BASE} ${isActive ? NAV_LINK_ACTIVE : ""}`}
+          >
+            <FolderKanban className="w-4 h-4" />
+            Projects
           </NavLink>
         )}
 

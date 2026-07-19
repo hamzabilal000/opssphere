@@ -25,6 +25,8 @@ import ResetPasswordPage from "./Pages/ResetPasswordPage";
 import AcceptInvitationPage from "./Pages/AcceptInvitationPage";
 import OverviewPage from "./Pages/OverviewPage";
 import OrganizationDetailPage from "./Pages/OrganizationDetailPage";
+import ProjectsListPage from "./Pages/ProjectsListPage";
+import ProjectDetailPage from "./Pages/ProjectDetailPage";
 import SessionsPage from "./Pages/SessionsPage";
 import ProfilePage from "./Pages/ProfilePage";
 import { ProtectedRoute } from "./components/shell/ProtectedRoute";
@@ -47,6 +49,12 @@ export default function App() {
         <Route path="/dashboard" element={<AppShell />}>
           <Route index element={<OverviewPage />} />
           <Route path="organizations/:organizationId" element={<OrganizationDetailPage />} />
+          {/* Day 7: projects live one level deeper under their organization */}
+          <Route path="organizations/:organizationId/projects" element={<ProjectsListPage />} />
+          <Route
+            path="organizations/:organizationId/projects/:projectId"
+            element={<ProjectDetailPage />}
+          />
           <Route path="sessions" element={<SessionsPage />} />
           <Route path="profile" element={<ProfilePage />} />
         </Route>

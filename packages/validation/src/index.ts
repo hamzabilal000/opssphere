@@ -203,3 +203,44 @@ export const createOrgInvitationSchema = z.object({
   roleId: z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid role id"),
 });
 export type CreateOrgInvitationInput = z.infer<typeof createOrgInvitationSchema>;
+
+// ============================================================================
+// DAY 7 — PROJECTS, PROJECT MEMBERS & MILESTONES SCHEMAS
+// ============================================================================
+
+const objectIdSchema = z.string().regex(/^[0-9a-fA-F]{24}$/, "Invalid id");
+
+export const createProjectSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(120, "Name is too long"),
+  description: z.string().max(2000, "Description is too long").default(""),
+});
+export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+
+export const updateProjectSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(120, "Name is too long").optional(),
+  description: z.string().max(2000, "Description is too long").optional(),
+  status: z.enum(["active", "completed", "archived"]).optional(),
+});
+export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
+
+export const addProjectMemberSchema = z.object({
+  userId: objectIdSchema,
+  role: z.enum(["lead", "member"]).default("member"),
+});
+export type AddProjectMemberInput = z.infer<typeof addProjectMemberSchema>;
+
+export const createMilestoneSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(120, "Name is too long"),
+  // z.coerce.date() accepts either a real Date or a date STRING (e.g. from
+  // an HTML <input type="date">, which always sends plain text) and turns
+  // it into a real JavaScript Date either way.
+  dueDate: z.coerce.date(),
+});
+export type CreateMilestoneInput = z.infer<typeof createMilestoneSchema>;
+
+export const updateMilestoneSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(120, "Name is too long").optional(),
+  dueDate: z.coerce.date().optional(),
+  isComplete: z.boolean().optional(),
+});
+export type UpdateMilestoneInput = z.infer<typeof updateMilestoneSchema>;

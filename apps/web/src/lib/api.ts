@@ -9,6 +9,9 @@ import type {
   RoleSummary,
   DepartmentSummary,
   TeamSummary,
+  ProjectSummary,
+  ProjectMemberSummary,
+  MilestoneSummary,
 } from "@opssphere/shared-types";
 import type {
   RegisterInput,
@@ -21,6 +24,11 @@ import type {
   CreateDepartmentInput,
   CreateTeamInput,
   CreateOrgInvitationInput,
+  CreateProjectInput,
+  UpdateProjectInput,
+  AddProjectMemberInput,
+  CreateMilestoneInput,
+  UpdateMilestoneInput,
 } from "@opssphere/validation";
 
 /**
@@ -237,4 +245,100 @@ export function createOrgInvitation(organizationId: string, input: CreateOrgInvi
     method: "POST",
     body: input,
   });
+}
+
+// ============================================================================
+// DAY 7 — PROJECTS, PROJECT MEMBERS & MILESTONES
+// ============================================================================
+
+function projectsBase(organizationId: string): string {
+  return `/organizations/${encodeURIComponent(organizationId)}/projects`;
+}
+
+export function listProjects(organizationId: string): Promise<{ projects: ProjectSummary[] }> {
+  return apiRequest(projectsBase(organizationId));
+}
+
+export function createProject(
+  organizationId: string,
+  input: CreateProjectInput
+): Promise<{ project: ProjectSummary }> {
+  return apiRequest(projectsBase(organizationId), { method: "POST", body: input });
+}
+
+export function getProject(organizationId: string, projectId: string): Promise<{ project: ProjectSummary }> {
+  return apiRequest(`${projectsBase(organizationId)}/${encodeURIComponent(projectId)}`);
+}
+
+export function updateProject(
+  organizationId: string,
+  projectId: string,
+  input: UpdateProjectInput
+): Promise<{ project: ProjectSummary }> {
+  return apiRequest(`${projectsBase(organizationId)}/${encodeURIComponent(projectId)}`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export function listProjectMembers(
+  organizationId: string,
+  projectId: string
+): Promise<{ members: ProjectMemberSummary[] }> {
+  return apiRequest(`${projectsBase(organizationId)}/${encodeURIComponent(projectId)}/members`);
+}
+
+export function addProjectMember(
+  organizationId: string,
+  projectId: string,
+  input: AddProjectMemberInput
+): Promise<{ member: ProjectMemberSummary }> {
+  return apiRequest(`${projectsBase(organizationId)}/${encodeURIComponent(projectId)}/members`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function removeProjectMember(organizationId: string, projectId: string, memberId: string): Promise<null> {
+  return apiRequest(
+    `${projectsBase(organizationId)}/${encodeURIComponent(projectId)}/members/${encodeURIComponent(memberId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export function listMilestones(
+  organizationId: string,
+  projectId: string
+): Promise<{ milestones: MilestoneSummary[] }> {
+  return apiRequest(`${projectsBase(organizationId)}/${encodeURIComponent(projectId)}/milestones`);
+}
+
+export function createMilestone(
+  organizationId: string,
+  projectId: string,
+  input: CreateMilestoneInput
+): Promise<{ milestone: MilestoneSummary }> {
+  return apiRequest(`${projectsBase(organizationId)}/${encodeURIComponent(projectId)}/milestones`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function updateMilestone(
+  organizationId: string,
+  projectId: string,
+  milestoneId: string,
+  input: UpdateMilestoneInput
+): Promise<{ milestone: MilestoneSummary }> {
+  return apiRequest(
+    `${projectsBase(organizationId)}/${encodeURIComponent(projectId)}/milestones/${encodeURIComponent(milestoneId)}`,
+    { method: "PATCH", body: input }
+  );
+}
+
+export function deleteMilestone(organizationId: string, projectId: string, milestoneId: string): Promise<null> {
+  return apiRequest(
+    `${projectsBase(organizationId)}/${encodeURIComponent(projectId)}/milestones/${encodeURIComponent(milestoneId)}`,
+    { method: "DELETE" }
+  );
 }

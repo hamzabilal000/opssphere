@@ -31,6 +31,11 @@ import type {
   CreateDepartmentInput,
   CreateTeamInput,
   CreateOrgInvitationInput,
+  CreateProjectInput,
+  UpdateProjectInput,
+  AddProjectMemberInput,
+  CreateMilestoneInput,
+  UpdateMilestoneInput,
 } from "@opssphere/validation";
 
 // ----------------------------------------------------------------------------
@@ -207,5 +212,121 @@ export function useCreateOrgInvitationMutation(organizationId: string) {
     // No invalidation needed - sending an invitation doesn't change
     // anything the CURRENT org's queries (members/roles/etc) show yet; the
     // invitee only shows up as a real member once they accept it.
+  });
+}
+
+// ----------------------------------------------------------------------------
+// PROJECTS  (Day 7)
+// ----------------------------------------------------------------------------
+export function useProjectsQuery(organizationId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects"],
+    queryFn: () => api.listProjects(organizationId),
+    enabled: Boolean(organizationId),
+  });
+}
+
+export function useProjectQuery(organizationId: string, projectId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects", projectId],
+    queryFn: () => api.getProject(organizationId, projectId),
+    enabled: Boolean(organizationId) && Boolean(projectId),
+  });
+}
+
+export function useCreateProjectMutation(organizationId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateProjectInput) => api.createProject(organizationId, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects"] }),
+  });
+}
+
+export function useUpdateProjectMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateProjectInput) => api.updateProject(organizationId, projectId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects"] });
+      queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects", projectId] });
+    },
+  });
+}
+
+export function useProjectMembersQuery(organizationId: string, projectId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects", projectId, "members"],
+    queryFn: () => api.listProjectMembers(organizationId, projectId),
+    enabled: Boolean(organizationId) && Boolean(projectId),
+  });
+}
+
+export function useAddProjectMemberMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AddProjectMemberInput) => api.addProjectMember(organizationId, projectId, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "members"],
+      });
+      // Adding a member changes the project's memberCount too, shown on
+      // both the list page and this project's own summary.
+      queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects"] });
+    },
+  });
+}
+
+export function useRemoveProjectMemberMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (memberId: string) => api.removeProjectMember(organizationId, projectId, memberId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "members"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects"] });
+    },
+  });
+}
+
+export function useMilestonesQuery(organizationId: string, projectId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects", projectId, "milestones"],
+    queryFn: () => api.listMilestones(organizationId, projectId),
+    enabled: Boolean(organizationId) && Boolean(projectId),
+  });
+}
+
+export function useCreateMilestoneMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateMilestoneInput) => api.createMilestone(organizationId, projectId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "milestones"],
+      }),
+  });
+}
+
+export function useUpdateMilestoneMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ milestoneId, input }: { milestoneId: string; input: UpdateMilestoneInput }) =>
+      api.updateMilestone(organizationId, projectId, milestoneId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "milestones"],
+      }),
+  });
+}
+
+export function useDeleteMilestoneMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (milestoneId: string) => api.deleteMilestone(organizationId, projectId, milestoneId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "milestones"],
+      }),
   });
 }

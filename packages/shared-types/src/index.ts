@@ -209,11 +209,16 @@ export const PERMISSIONS = {
   ROLE_MANAGE: "role.manage", // create/edit/delete custom roles
   DEPARTMENT_MANAGE: "department.manage", // create/delete departments
   TEAM_MANAGE: "team.manage", // create/delete teams
-  // These two are reserved, unused permission strings - they're the exact
-  // examples the SRS names for FUTURE modules (projects, support tickets)
-  // that don't exist yet. Listing them now means the permission catalog
-  // doesn't need to change shape later - only which modules check them.
+  // DAY 7: `project.create` was reserved (unused) since Day 5 - the exact
+  // string the SRS names as its example. Today is the first day it's
+  // actually checked by a real route. `PROJECT_MANAGE` and
+  // `PROJECT_MEMBER_MANAGE` are new today, following the same
+  // "module.action" naming pattern as everything else in this list.
   PROJECT_CREATE: "project.create",
+  PROJECT_MANAGE: "project.manage", // edit/archive a project, manage its milestones
+  PROJECT_MEMBER_MANAGE: "project.member.manage", // add/remove people from a project
+  // Still reserved/unused - the SRS's other example permission string, for
+  // a support-tickets module that doesn't exist yet.
   TICKET_ASSIGN: "ticket.assign",
 } as const;
 
@@ -249,5 +254,50 @@ export interface TeamSummary {
   id: string;
   name: string;
   departmentId?: string;
+  createdAt: string;
+}
+
+// ============================================================================
+// DAY 7 — PROJECTS & MEMBERS TYPES
+// ----------------------------------------------------------------------------
+// A Project is deliberately simple today - name, description, status, and
+// who's on it. Tasks, sprints, and the Kanban board are Day 8's job; today
+// is just "stand up the project-tracking backbone" (the SRS's own words
+// for this day).
+// ============================================================================
+
+export type ProjectStatus = "active" | "completed" | "archived";
+
+/** DELIBERATELY a much smaller idea than Day 5's org-wide custom Roles -
+ * a project only ever needs to distinguish "runs this project" from
+ * "works on this project," not a full permission system of its own. */
+export type ProjectMemberRole = "lead" | "member";
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  description: string;
+  status: ProjectStatus;
+  memberCount: number;
+  createdAt: string;
+}
+
+/** One row in a project's member list - note this is a DIFFERENT thing
+ * from MembershipSummary (organization-level). Someone can be an
+ * organization Member but a project Lead, or vice versa - the two role
+ * systems are intentionally independent. */
+export interface ProjectMemberSummary {
+  id: string;
+  userId: string;
+  email: string;
+  role: ProjectMemberRole;
+  addedAt: string;
+}
+
+export interface MilestoneSummary {
+  id: string;
+  name: string;
+  dueDate: string;
+  isComplete: boolean;
   createdAt: string;
 }
