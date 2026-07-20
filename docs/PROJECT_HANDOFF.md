@@ -24,7 +24,7 @@ currently present in the repo** — see §7 for what this means for you):
 - `OpsSphere_18_Day_Build_Schedule.pdf` — the day-by-day build plan.
 
 If you don't have these PDFs, §6 of this document reconstructs everything currently knowable about
-Days 10-18 from forward-looking hints already embedded in code comments and learning notes — treat
+Days 11-18 from forward-looking hints already embedded in code comments and learning notes — treat
 that reconstruction as a best-effort placeholder, not a confirmed spec, and say so if you use it.
 
 ---
@@ -51,7 +51,7 @@ that reconstruction as a best-effort placeholder, not a confirmed spec, and say 
 
 ---
 
-## 3. Repository structure (as of Day 9)
+## 3. Repository structure (as of Day 10)
 
 ```
 OpsSphere/
@@ -70,6 +70,8 @@ OpsSphere/
 │   │       │   ├── tasks/           sprint, task, task-comment, task-attachment, time-entry models +
 │   │       │   │                    service/controller/routes  (Day 8, extended Day 9 with comment
 │   │       │   │                    edit/delete, @mentions, and socket event emission)
+│   │       │   ├── tickets/         ticket, ticket-comment models + service/controller/routes
+│   │       │   │                    (Day 10, newest module - ORG-level, not under a project)
 │   │       │   └── health/          health.routes.ts
 │   │       ├── app.ts                createApp() — assembles Express app, mounts every router
 │   │       │                          (deliberately does NOT touch Socket.IO — see index.ts)
@@ -84,7 +86,8 @@ OpsSphere/
 │           │                         delete + mention highlighting)
 │           ├── Pages/                One file per route (RegisterPage, LoginPage, OverviewPage,
 │           │                         OrganizationDetailPage, ProjectsListPage, ProjectDetailPage,
-│           │                         TaskBoardPage, SessionsPage, ProfilePage, ...)
+│           │                         TaskBoardPage, TicketsListPage, TicketDetailPage,
+│           │                         SessionsPage, ProfilePage, ...)
 │           ├── lib/api.ts            Every fetch call to the backend, thin wrapper + typed functions
 │           ├── lib/queries.ts        Every useQuery/useMutation hook, built on lib/api.ts
 │           ├── lib/socket.ts         Day 9 — useProjectSocket() hook, one shared client connection
@@ -97,7 +100,7 @@ OpsSphere/
 │   ├── eslint-config/                Shared lint rules
 │   └── tsconfig/                     Shared base tsconfig
 ├── docs/
-│   ├── learning-notes/               01 through 09 (HTML, styled, one per completed day)
+│   ├── learning-notes/               01 through 10 (HTML, styled, one per completed day)
 │   └── PROJECT_HANDOFF.md            This file — keep it updated after every day (see §9)
 ├── docker-compose.yml               MongoDB, Valkey, Mailpit, MinIO
 └── README.md                        Currently STALE — still says "Day 1 of 18", update this
@@ -152,9 +155,17 @@ make the codebase feel inconsistent and will likely surprise whoever reads it ne
   with a 409, not cascaded. (Example: can't delete a Sprint while Tasks still point at it; can't
   delete a Task while it still has subtasks.)
 - "Ownership-or-permission" pattern: some writes (task attachment/time-entry/comment
-  edit-or-delete, as of Day 9) are allowed for whoever created the record, OR anyone holding the
-  relevant `*.manage` permission — checked in the service layer, not via `requirePermission` at the
-  route level, since it's not a flat permission check.
+  edit-or-delete since Day 9; ticket edit and ticket status-change since Day 10) are allowed for
+  whoever created the record, OR anyone holding the relevant `*.manage`/`*.assign` permission —
+  checked in the service layer, not via `requirePermission` at the route level, since it's not a
+  flat permission check. **"Ownership" can mean different things on the same model** — Day 10's
+  Ticket is the first example: editing details = you're the ticket's CREATOR; changing status =
+  you're the ticket's current ASSIGNEE. Don't assume ownership always means "whoever created it."
+- **Org-level vs. project-level modules**: most modules so far nest under a project
+  (`projectId` on Task/Sprint). Day 10's Ticket deliberately does NOT — it only has an
+  `organizationId`, mounted at the same route depth as `organizationRouter` itself, not under
+  `project.routes.ts`. Use this shape for anything that's a whole-company concern rather than
+  belonging to one specific project.
 
 **Real-time (Day 9 onward):**
 - `apps/api/src/lib/socket.ts` holds the ONE Socket.IO server instance (module-level variable,
@@ -312,7 +323,7 @@ attachments/time-entries are deliberately permission-free (any active member can
 comments, attachments, time entries). Board only shows top-level cards; subtasks live inside the
 parent's modal, not as their own board cards (documented UI simplification, not a backend limit).
 
-### ✅ Day 9 — Real-Time (most recently completed)
+### ✅ Day 9 — Real-Time
 The first genuinely different communication shape in the project: Socket.IO, a connection that
 stays open so the server can push messages without being asked. `apps/api/src/lib/socket.ts` is
 the whole server-side piece — auth reuses the same access-token cookie `requireAuth` checks (no
@@ -334,23 +345,33 @@ and `TaskDetailModal.tsx` (comment edit/delete UI, mention highlighting). Vite's
 unused — a single server instance doesn't need Socket.IO's Redis adapter, only multi-instance
 deployments would.
 
+### ✅ Day 10 — Support Tickets (most recently completed)
+`PERMISSIONS.TICKET_ASSIGN`, reserved and unused since Day 5, finally gets a real module. `Ticket`
++ `TicketComment` models — deliberately ORG-level (no `projectId`, unlike everything since Day 7),
+mounted at the same route depth as `organizationRouter`. Any active member can file a ticket and
+comment on any ticket (no permission gate, same low-risk reasoning as task comments) — this is the
+first module a plain "Member"-role user can actually use themselves, not just watch a manager use.
+Two DIFFERENT ownership-or-permission rules live on the one model: editing a ticket's own details
+(title/description/priority) needs you to be its CREATOR (or hold `ticket.assign`); changing its
+STATUS needs you to be its current ASSIGNEE (or hold `ticket.assign`); assigning/reassigning has NO
+ownership exception at all — a flat `requirePermission(TICKET_ASSIGN)` route-level check, its own
+separate `PATCH .../assign` endpoint rather than folded into the general update route. Priority
+(`low`/`medium`/`high`/`urgent`) is this day's own small, undocumented-by-the-SRS design choice.
+Ticket comments are deliberately kept at Day-8 simplicity (no edit/delete/@mentions, no Socket.IO
+live updates) — reusing Day 9's richer machinery here is a disclosed future upgrade, not today's
+job. Frontend: `TicketsListPage.tsx` (status/"only mine" filters, a file-a-ticket form with no
+`canManage` gate) + `TicketDetailPage.tsx`, plus a new "Tickets" sidebar link.
+
 ---
 
-### ⚠️ Days 10-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
+### ⚠️ Days 11-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
 
 The schedule and build-guide PDFs referenced by the README are **not present in this repo**. What
-follows for Days 10-18 is reconstructed **only** from forward-looking comments already written into
-the Day 1-9 code and learning notes. Treat the day numbers below with **decreasing confidence** the
-further you go — Days 10-15 are educated guesses about ordering; Day 18 has zero hints anywhere.
+follows for Days 11-18 is reconstructed **only** from forward-looking comments already written into
+the Day 1-10 code and learning notes. Treat the day numbers below with **decreasing confidence** the
+further you go — Days 11-15 are educated guesses about ordering; Day 18 has zero hints anywhere.
 
-**Days 10-15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
-- A **support-tickets module** — `PERMISSIONS.TICKET_ASSIGN` ("ticket.assign") has been reserved
-  and unused since Day 5, explicitly commented as "the SRS's other example permission string, for a
-  support-tickets module that doesn't exist yet." `shared-types`'s `TenantOwnedBase` comment also
-  names `Ticket` as a future document type alongside `Project`/`Task`.
-  **This is a real gap in the current UI**: right now there's no way for a non-admin ("Member"
-  role) to see any nav link at all beyond Overview/Organization/Projects/Sessions/Profile — a
-  tickets module (or similar) is likely what gives regular members something of their own to do.
+**Days 11-15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
 - **Task dependencies, checklists, and a risk register** — explicitly named by the SRS (per
   multiple comments) as "should have, not today's job" as of Day 8. Task model would likely need a
   `dependsOnTaskIds` field or similar; a risk register is probably its own new model entirely.
@@ -449,10 +470,10 @@ loops).** Never claim more confidence than what was actually run.
 
 ## 8. Current state / how to resume
 
-- Git: as of Day 9, the working tree has the Day 9 changes staged but **not yet committed** (the
-  user did not ask for an automatic push this time — only Day 7 was explicitly pushed by the
-  assistant, back on Day 7). Check `git log` and `git status` first before assuming anything about
-  what's committed.
+- Git: as of Day 10, the working tree has the Day 10 changes staged but **not yet committed** (the
+  user has not asked for an automatic push since Day 7 — check `git log` and `git status` first
+  before assuming anything about what's actually committed; don't assume Days 8/9/10 are pushed
+  just because Day 7 was).
 - The README.md's "Status" line is stale (still says "Day 1 of 18") — worth fixing whenever
   convenient, it's a one-line change.
 - No `.env` file is assumed to exist in this sandbox — real local development (`pnpm dev` against
@@ -497,6 +518,6 @@ this file is a MAP for another AI picking up the project cold, not the whole ter
 ---
 
 **Bottom line for whoever picks this up next**: follow §5's rhythm exactly (including this file's
-own update step, §9), respect the conventions in §4 (they're consistent across 9,000+ lines of code
-so far — don't introduce a different style), verify using §7's methodology, and be honest about the
-Day 10-18 uncertainty in §6 until you can get your hands on the real schedule PDF.
+own update step, §9), respect the conventions in §4 (they're consistent across 10,000+ lines of
+code so far — don't introduce a different style), verify using §7's methodology, and be honest
+about the Day 11-18 uncertainty in §6 until you can get your hands on the real schedule PDF.

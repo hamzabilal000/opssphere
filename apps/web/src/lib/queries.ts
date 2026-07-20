@@ -44,6 +44,11 @@ import type {
   UpdateTaskCommentInput,
   CreateTaskAttachmentInput,
   CreateTimeEntryInput,
+  CreateTicketInput,
+  UpdateTicketInput,
+  AssignTicketInput,
+  UpdateTicketStatusInput,
+  CreateTicketCommentInput,
 } from "@opssphere/validation";
 import type { TaskStatus } from "@opssphere/shared-types";
 
@@ -544,6 +549,81 @@ export function useDeleteTimeEntryMutation(organizationId: string, projectId: st
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "time-entries"],
+      }),
+  });
+}
+
+// ----------------------------------------------------------------------------
+// DAY 10 — SUPPORT TICKETS  (org-level, not nested under a project)
+// ----------------------------------------------------------------------------
+export function useTicketsQuery(organizationId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "tickets"],
+    queryFn: () => api.listTickets(organizationId),
+    enabled: Boolean(organizationId),
+  });
+}
+
+export function useTicketQuery(organizationId: string, ticketId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "tickets", ticketId],
+    queryFn: () => api.getTicket(organizationId, ticketId),
+    enabled: Boolean(organizationId) && Boolean(ticketId),
+  });
+}
+
+export function useCreateTicketMutation(organizationId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTicketInput) => api.createTicket(organizationId, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "tickets"] }),
+  });
+}
+
+function invalidateTicket(queryClient: ReturnType<typeof useQueryClient>, organizationId: string, ticketId: string) {
+  queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "tickets"] });
+  queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "tickets", ticketId] });
+}
+
+export function useUpdateTicketMutation(organizationId: string, ticketId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateTicketInput) => api.updateTicket(organizationId, ticketId, input),
+    onSuccess: () => invalidateTicket(queryClient, organizationId, ticketId),
+  });
+}
+
+export function useAssignTicketMutation(organizationId: string, ticketId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AssignTicketInput) => api.assignTicket(organizationId, ticketId, input),
+    onSuccess: () => invalidateTicket(queryClient, organizationId, ticketId),
+  });
+}
+
+export function useUpdateTicketStatusMutation(organizationId: string, ticketId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateTicketStatusInput) => api.updateTicketStatus(organizationId, ticketId, input),
+    onSuccess: () => invalidateTicket(queryClient, organizationId, ticketId),
+  });
+}
+
+export function useTicketCommentsQuery(organizationId: string, ticketId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "tickets", ticketId, "comments"],
+    queryFn: () => api.listTicketComments(organizationId, ticketId),
+    enabled: Boolean(organizationId) && Boolean(ticketId),
+  });
+}
+
+export function useCreateTicketCommentMutation(organizationId: string, ticketId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTicketCommentInput) => api.createTicketComment(organizationId, ticketId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "tickets", ticketId, "comments"],
       }),
   });
 }

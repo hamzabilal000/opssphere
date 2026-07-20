@@ -12,7 +12,7 @@
 
 import { useEffect } from "react";
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, Building2, FolderKanban, Monitor, UserCircle, ChevronDown } from "lucide-react";
+import { LayoutDashboard, Building2, FolderKanban, LifeBuoy, Monitor, UserCircle, ChevronDown } from "lucide-react";
 import { useOrganizationsQuery } from "../../lib/queries";
 import { useActiveOrgStore } from "../../store/activeOrgStore";
 
@@ -102,6 +102,20 @@ export function Sidebar() {
           >
             <FolderKanban className="w-4 h-4" />
             Projects
+          </NavLink>
+        )}
+
+        {/* DAY 10: org-level, same nesting depth as Projects above - not
+            under any one project. This is also the first nav link every
+            "Member"-role user actually has something of their own to do
+            with (file a ticket) - see the Day 10 learning note. */}
+        {activeOrganizationId && (
+          <NavLink
+            to={`/dashboard/organizations/${activeOrganizationId}/tickets`}
+            className={({ isActive }) => `${NAV_LINK_BASE} ${isActive ? NAV_LINK_ACTIVE : ""}`}
+          >
+            <LifeBuoy className="w-4 h-4" />
+            Tickets
           </NavLink>
         )}
 

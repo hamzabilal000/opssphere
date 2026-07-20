@@ -225,8 +225,12 @@ export const PERMISSIONS = {
   // Day 8 learning note for why that split makes sense).
   TASK_MANAGE: "task.manage",
   SPRINT_MANAGE: "sprint.manage",
-  // Still reserved/unused - the SRS's other example permission string, for
-  // a support-tickets module that doesn't exist yet.
+  // DAY 10: no longer reserved - this is the SRS's own example permission
+  // string (named in the SRS alongside project.create since Day 5), now
+  // actually checked. Governs assigning a ticket to someone, and is one
+  // half of the "ownership OR ticket.assign" rule for editing a ticket or
+  // changing its status (the other half being "you're the ticket's
+  // assignee" - see ticket.service.ts).
   TICKET_ASSIGN: "ticket.assign",
 } as const;
 
@@ -433,4 +437,47 @@ export interface CommentChangedPayload {
 export interface CommentDeletedPayload {
   taskId: string;
   commentId: string;
+}
+
+// ============================================================================
+// DAY 10 — SUPPORT TICKETS TYPES
+// ----------------------------------------------------------------------------
+// The module `ticket.assign` has been reserved (unused) since Day 5, and
+// `TenantOwnedBase`'s own comment has named `Ticket` as a future document
+// type since Day 1 - today's the day both finally get used. Deliberately
+// ORG-LEVEL, not project-scoped (unlike Task) - a support ticket ("the
+// printer is broken," "I can't log into the VPN") isn't naturally part of
+// any one project, it's a whole-company helpdesk concern.
+// ============================================================================
+
+export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
+
+// Not named anywhere in the SRS comments so far - a reasonable, standard
+// small set for a support-ticket priority field, this day's own design
+// choice (same spirit as Day 8's four-column TaskStatus).
+export type TicketPriority = "low" | "medium" | "high" | "urgent";
+
+export interface TicketSummary {
+  id: string;
+  title: string;
+  description: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  createdBy: string;
+  createdByEmail: string;
+  // Unassigned until someone with ticket.assign hands it to a real person -
+  // see ticket.service.ts's assignTicket. Both undefined together, never
+  // one without the other.
+  assigneeId?: string;
+  assigneeEmail?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TicketCommentSummary {
+  id: string;
+  authorId: string;
+  authorEmail: string;
+  body: string;
+  createdAt: string;
 }

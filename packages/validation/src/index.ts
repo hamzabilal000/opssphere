@@ -323,3 +323,45 @@ export const createTimeEntrySchema = z.object({
   workDate: z.coerce.date(),
 });
 export type CreateTimeEntryInput = z.infer<typeof createTimeEntrySchema>;
+
+// ============================================================================
+// DAY 10 — SUPPORT TICKETS SCHEMAS
+// ============================================================================
+
+const ticketPrioritySchema = z.enum(["low", "medium", "high", "urgent"]);
+const ticketStatusSchema = z.enum(["open", "in_progress", "resolved", "closed"]);
+
+export const createTicketSchema = z.object({
+  title: z.string().min(2, "Title must be at least 2 characters").max(200, "Title is too long"),
+  description: z.string().max(4000, "Description is too long").default(""),
+  priority: ticketPrioritySchema.default("medium"),
+});
+export type CreateTicketInput = z.infer<typeof createTicketSchema>;
+
+export const updateTicketSchema = z.object({
+  title: z.string().min(2, "Title must be at least 2 characters").max(200, "Title is too long").optional(),
+  description: z.string().max(4000, "Description is too long").optional(),
+  priority: ticketPrioritySchema.optional(),
+});
+export type UpdateTicketInput = z.infer<typeof updateTicketSchema>;
+
+// Deliberately its OWN endpoint/schema, separate from updateTicketSchema -
+// assigning is a permission-gated action (ticket.assign), editing details
+// is an ownership-or-permission one; keeping them as separate requests
+// means a route can require one without accidentally allowing the other.
+export const assignTicketSchema = z.object({
+  // null explicitly means "unassign this ticket" - distinct from omitting
+  // the field entirely, same pattern as Day 8's updateTaskSchema.sprintId.
+  assigneeId: objectIdSchema.nullable(),
+});
+export type AssignTicketInput = z.infer<typeof assignTicketSchema>;
+
+export const updateTicketStatusSchema = z.object({
+  status: ticketStatusSchema,
+});
+export type UpdateTicketStatusInput = z.infer<typeof updateTicketStatusSchema>;
+
+export const createTicketCommentSchema = z.object({
+  body: z.string().min(1, "Comment can't be empty").max(4000, "Comment is too long"),
+});
+export type CreateTicketCommentInput = z.infer<typeof createTicketCommentSchema>;

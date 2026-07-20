@@ -28,6 +28,8 @@ import OrganizationDetailPage from "./Pages/OrganizationDetailPage";
 import ProjectsListPage from "./Pages/ProjectsListPage";
 import ProjectDetailPage from "./Pages/ProjectDetailPage";
 import TaskBoardPage from "./Pages/TaskBoardPage";
+import TicketsListPage from "./Pages/TicketsListPage";
+import TicketDetailPage from "./Pages/TicketDetailPage";
 import SessionsPage from "./Pages/SessionsPage";
 import ProfilePage from "./Pages/ProfilePage";
 import { ProtectedRoute } from "./components/shell/ProtectedRoute";
@@ -61,6 +63,10 @@ export default function App() {
             path="organizations/:organizationId/projects/:projectId/board"
             element={<TaskBoardPage />}
           />
+          {/* Day 10: tickets are ORG-level, same nesting depth as
+              "organizations/:organizationId" itself - not under a project. */}
+          <Route path="organizations/:organizationId/tickets" element={<TicketsListPage />} />
+          <Route path="organizations/:organizationId/tickets/:ticketId" element={<TicketDetailPage />} />
           <Route path="sessions" element={<SessionsPage />} />
           <Route path="profile" element={<ProfilePage />} />
         </Route>

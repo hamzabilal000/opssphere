@@ -49,7 +49,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.PROJECT_MEMBER_MANAGE]: "Add/remove project members",
   [PERMISSIONS.TASK_MANAGE]: "Create/edit/delete/move tasks",
   [PERMISSIONS.SPRINT_MANAGE]: "Manage sprints",
-  [PERMISSIONS.TICKET_ASSIGN]: "Assign tickets (reserved for a later day)",
+  [PERMISSIONS.TICKET_ASSIGN]: "Assign support tickets",
 };
 
 export default function OrganizationDetailPage() {

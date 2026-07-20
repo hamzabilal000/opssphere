@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 10 — Support Tickets</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 10 OF 18</div>
+  <h1>Support Tickets</h1>
+  <p class="sub">A permission string that's been sitting unused since Day 5 finally gets a real
+  module built around it - and regular "Member"-role users get something of their own to do.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Two loose threads get tied off today. First: <code>ticket.assign</code> has existed in the
+<code>PERMISSIONS</code> catalog since Day 5, always "reserved" for a support-tickets module that
+didn't exist yet - today it does. Second, and arguably more important: every module built so far
+(Projects, Tasks) is something a "Member"-role user can mostly only WATCH, not really own - creating
+one needs <code>project.create</code> or <code>task.manage</code>, permissions a plain Member
+doesn't have by default. Tickets flip that: ANY active member can file one. It's the first module
+in the app that gives a regular user a reason to open it themselves, not just a manager.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every file involved has comments explaining what's new - especially
+  <code>ticket.service.ts</code>, which has TWO different ownership-or-permission rules living side
+  by side (one for editing, a different one for status changes) - worth reading closely.
+</div>
+
+<h2>Two new concepts, explained simply</h2>
+
+<h3>1. Org-level, not project-level - a genuinely different shape than Task</h3>
+<p>Every model since Day 7 has hung off a Project (<code>projectId</code> on Task, Sprint, ...).
+A Ticket has NO <code>projectId</code> at all - just <code>organizationId</code>, one level up, the
+same depth as Organization itself. "The printer is broken" or "I can't log into the VPN" isn't
+naturally part of any one project - it's a whole-company helpdesk concern. <code>ticket.routes.ts</code>
+is mounted at the exact same base path as <code>organization.routes.ts</code>, not nested under
+projects the way <code>task.routes.ts</code> is.</p>
+
+<h3>2. Two DIFFERENT ownership rules on the same model</h3>
+<p>Every "ownership-or-permission" rule before today (Day 8's attachments/time-entries, Day 9's
+comments) used the same definition of ownership: whoever CREATED the thing. Tickets need two
+different answers depending on the action:</p>
+<ul>
+<li><b>Editing details</b> (title/description/priority): ownership means the ticket's
+<b>creator</b> - the person who reported the issue can still fix a typo in their own report.</li>
+<li><b>Changing status</b> (open → in progress → resolved → closed): ownership means the ticket's
+current <b>assignee</b> - whoever's actually WORKING the ticket can move it through its lifecycle
+without needing org-wide <code>ticket.assign</code>.</li>
+<li><b>Assigning/reassigning</b>: NO ownership exception at all - a flat
+<code>requirePermission(TICKET_ASSIGN)</code> check, full stop. Routing work to the right person is
+inherently a coordinator action, not something a member should be able to do to themselves or
+others just by asking.</li>
+</ul>
+<p>See <code>ticket.service.ts</code>'s <code>updateTicket</code> vs. <code>updateTicketStatus</code>
+for exactly how each one checks a different field on the same document.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext"><b>Any member clicks "Tickets"</b> in the sidebar - a brand-new nav link, right alongside Projects.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>They file one</b>: a title, optional description, and a priority. No permission needed - it's created immediately, unassigned, status "open."</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>Someone with <code>ticket.assign</code></b> opens it and assigns it to a teammate from a dropdown of real org members (re-checked as an ACTIVE membership, same Day-4/7/8 pattern).</div></div>
+<div class="step"><div class="num">4</div><div class="stext"><b>The assignee works the ticket</b>, moving its status from "open" to "in progress" to "resolved" - allowed because they're the assignee, even without <code>ticket.assign</code> themselves.</div></div>
+<div class="step"><div class="num">5</div><div class="stext"><b>Back and forth happens in the comment thread</b> - any member can reply, same low-risk "no permission gate" reasoning as task comments.</div></div>
+<div class="step"><div class="num">6</div><div class="stext"><b>The original reporter tries to reassign it</b> to someone else - gets a clean 403, since editing your own ticket's details doesn't include the power to assign it.</div></div>
+
+<h2>The new files, in one picture</h2>
+<pre><code>apps/api/src/modules/tickets/
+├── ticket.model.ts            <span style="color:#7be9d8">→ org-level: title, description, status, priority, assigneeId</span>
+├── ticket-comment.model.ts     <span style="color:#7be9d8">→ deliberately Day-8-simple (no edit/delete/mentions)</span>
+├── ticket.service.ts            <span style="color:#7be9d8">→ TWO ownership rules - see the design detail above</span>
+├── ticket.controller.ts          <span style="color:#7be9d8">→ same 3-step shape as every other controller</span>
+└── ticket.routes.ts               <span style="color:#7be9d8">→ mounted at the ORG level, not under projects</span>
+
+apps/web/src/Pages/
+├── TicketsListPage.tsx    <span style="color:#7be9d8">→ every ticket in the org, status/mine filters, file-a-ticket form</span>
+└── TicketDetailPage.tsx    <span style="color:#7be9d8">→ one ticket: details, assignee, status, comment thread</span></code></pre>
+
+<h2>A design detail worth understanding: why assignment has its own endpoint</h2>
+<div class="callout amber">
+  <strong class="title">PATCH .../assign is separate from PATCH .../ticketId</strong>
+  Assigning a ticket could have just been one more field on the general "update a ticket" endpoint -
+  instead it's <code>PATCH /tickets/:id/assign</code>, its own route, gated by
+  <code>requirePermission(TICKET_ASSIGN)</code> directly at the route level (no ownership check
+  needed inside the controller at all, unlike every other write in this module). Splitting it out
+  means the permission boundary is enforced in the SIMPLEST possible way for the one action that
+  genuinely has no ownership exception, instead of complicating the general update endpoint with "is
+  this specific field being changed, and if so, check a stricter rule." Same instinct as Day 8's
+  <code>moveTaskSchema</code> being its own narrow schema, separate from the general task update.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>Ticket comments can't be edited or deleted, and have no @mentions - reusing Day 9's richer
+  comment machinery here is a reasonable follow-up, not something today's already-full scope
+  (a whole new module) needs to also absorb.</li>
+  <li>No live updates via Socket.IO - tickets don't broadcast the way tasks/task-comments do since
+  Day 9. Extending the same room-and-broadcast pattern to tickets would be a small, mechanical
+  addition on top of what Day 9 already built, not a new concept.</li>
+  <li>No file attachments on tickets (unlike tasks) - not asked for, and would just repeat Day 8's
+  already-disclosed link-based-attachment scope choice for a second model.</li>
+  <li>No ticket deletion - only status changes, all the way through to "closed." Same "archiving
+  sidesteps the harder question" reasoning as Day 7's projects.</li>
+  <li>Priority is this day's own small design choice (low/medium/high/urgent) - not named anywhere
+  in the SRS comments seen so far, a standard, reasonable field for a support-ticket module.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> (no new packages today).</li>
+  <li>Run <code>pnpm dev</code>, log in, open an organization, click "Tickets."</li>
+  <li>File a ticket as a regular Member-role account if you have one (or just use your own).</li>
+  <li>As an Owner/admin account, open it and assign it to someone.</li>
+  <li>Log in as the assignee, move its status from open → in progress → resolved.</li>
+  <li>Confirm a plain Member without <code>ticket.assign</code> gets a 403 trying to reassign it.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every package (shared-types, validation, api, web) compiles with no TypeScript errors - clean on the first attempt again, no fix-up round needed</td><td>✅ Confirmed</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) completes with no errors - 1,694 modules bundled successfully</td><td>✅ Confirmed</td></tr>
+  <tr><td>All 8 new ticket/ticket-comment routes correctly reject requests with no login cookie</td><td>✅ Confirmed (401, tested without a database)</td></tr>
+  <tr><td>The two different ownership rules (creator-can-edit vs. assignee-can-change-status) and the flat ticket.assign-only rule for assignment</td><td>⏳ Needs you to test it locally - traced by hand in ticket.service.ts, not run against a live database</td></tr>
+  <tr><td>The full file → assign → work → resolve loop, and a Member correctly getting a 403 trying to reassign someone else's ticket</td><td>⏳ Needs you to test it locally (see steps above)</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Days 11-15 remain open per the reconstructed schedule - task dependencies/checklists/a risk
+register, real file uploads to replace Day 8's link-only attachments, and automatic access-token
+refresh are the next-most-concretely-referenced unbuilt features. See
+<code>docs/PROJECT_HANDOFF.md</code> for the full, honestly-uncertain breakdown.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 10 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

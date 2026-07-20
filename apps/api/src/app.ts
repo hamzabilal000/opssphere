@@ -34,6 +34,7 @@ import { authRouter } from "./modules/auth/auth.routes.js";
 import { organizationRouter } from "./modules/organizations/organization.routes.js";
 import { projectRouter } from "./modules/projects/project.routes.js";
 import { taskRouter } from "./modules/tasks/task.routes.js";
+import { ticketRouter } from "./modules/tickets/ticket.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 // TYPESCRIPT NOTE: `export function createApp() { ... }` — a totally normal
@@ -111,6 +112,10 @@ export function createApp() {
   // under a project, so taskRouter's URLs are "/:organizationId/projects/
   // :projectId/..." even though it's mounted at this same base path.
   app.use("/api/v1/organizations", taskRouter);
+  // DAY 10: same "share the base path, separate router" pattern again -
+  // tickets are ORG-level (no projectId in their URLs), same level as
+  // organizationRouter itself.
+  app.use("/api/v1/organizations", ticketRouter);
 
   // If NOTHING above matched the request's URL, this runs (see
   // middleware/errorHandler.ts for what it does).

@@ -18,6 +18,8 @@ import type {
   TaskCommentSummary,
   TaskAttachmentSummary,
   TimeEntrySummary,
+  TicketSummary,
+  TicketCommentSummary,
 } from "@opssphere/shared-types";
 import type {
   RegisterInput,
@@ -43,6 +45,11 @@ import type {
   UpdateTaskCommentInput,
   CreateTaskAttachmentInput,
   CreateTimeEntryInput,
+  CreateTicketInput,
+  UpdateTicketInput,
+  AssignTicketInput,
+  UpdateTicketStatusInput,
+  CreateTicketCommentInput,
 } from "@opssphere/validation";
 
 /**
@@ -539,5 +546,81 @@ export function deleteTimeEntry(
 ): Promise<null> {
   return apiRequest(`${taskPath(organizationId, projectId, taskId)}/time-entries/${encodeURIComponent(entryId)}`, {
     method: "DELETE",
+  });
+}
+
+// ============================================================================
+// DAY 10 — SUPPORT TICKETS
+// ----------------------------------------------------------------------------
+// Deliberately ORG-level, not nested under a project - see ticket.model.ts.
+// ============================================================================
+
+function ticketsBase(organizationId: string): string {
+  return `/organizations/${encodeURIComponent(organizationId)}/tickets`;
+}
+
+export function listTickets(organizationId: string): Promise<{ tickets: TicketSummary[] }> {
+  return apiRequest(ticketsBase(organizationId));
+}
+
+export function getTicket(organizationId: string, ticketId: string): Promise<{ ticket: TicketSummary }> {
+  return apiRequest(`${ticketsBase(organizationId)}/${encodeURIComponent(ticketId)}`);
+}
+
+export function createTicket(
+  organizationId: string,
+  input: CreateTicketInput
+): Promise<{ ticket: TicketSummary }> {
+  return apiRequest(ticketsBase(organizationId), { method: "POST", body: input });
+}
+
+export function updateTicket(
+  organizationId: string,
+  ticketId: string,
+  input: UpdateTicketInput
+): Promise<{ ticket: TicketSummary }> {
+  return apiRequest(`${ticketsBase(organizationId)}/${encodeURIComponent(ticketId)}`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export function assignTicket(
+  organizationId: string,
+  ticketId: string,
+  input: AssignTicketInput
+): Promise<{ ticket: TicketSummary }> {
+  return apiRequest(`${ticketsBase(organizationId)}/${encodeURIComponent(ticketId)}/assign`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export function updateTicketStatus(
+  organizationId: string,
+  ticketId: string,
+  input: UpdateTicketStatusInput
+): Promise<{ ticket: TicketSummary }> {
+  return apiRequest(`${ticketsBase(organizationId)}/${encodeURIComponent(ticketId)}/status`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export function listTicketComments(
+  organizationId: string,
+  ticketId: string
+): Promise<{ comments: TicketCommentSummary[] }> {
+  return apiRequest(`${ticketsBase(organizationId)}/${encodeURIComponent(ticketId)}/comments`);
+}
+
+export function createTicketComment(
+  organizationId: string,
+  ticketId: string,
+  input: CreateTicketCommentInput
+): Promise<{ comment: TicketCommentSummary }> {
+  return apiRequest(`${ticketsBase(organizationId)}/${encodeURIComponent(ticketId)}/comments`, {
+    method: "POST",
+    body: input,
   });
 }
