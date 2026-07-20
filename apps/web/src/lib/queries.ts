@@ -49,6 +49,10 @@ import type {
   AssignTicketInput,
   UpdateTicketStatusInput,
   CreateTicketCommentInput,
+  AddChecklistItemInput,
+  UpdateChecklistItemInput,
+  CreateRiskInput,
+  UpdateRiskInput,
 } from "@opssphere/validation";
 import type { TaskStatus } from "@opssphere/shared-types";
 
@@ -624,6 +628,87 @@ export function useCreateTicketCommentMutation(organizationId: string, ticketId:
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: ["organizations", organizationId, "tickets", ticketId, "comments"],
+      }),
+  });
+}
+
+// ----------------------------------------------------------------------------
+// DAY 11 — TASK CHECKLISTS & RISK REGISTER
+// ----------------------------------------------------------------------------
+// (Task DEPENDENCIES reuse useUpdateTaskMutation above - no new hook.)
+
+// ---- Checklist items --------------------------------------------------------
+// All three invalidate the SAME "tasks" list key useUpdateTaskMutation
+// already uses - checklistItems/checklistProgress live on TaskSummary
+// itself, so there's no separate collection to keep in sync.
+function invalidateTasks(queryClient: ReturnType<typeof useQueryClient>, organizationId: string, projectId: string) {
+  queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects", projectId, "tasks"] });
+}
+
+export function useAddChecklistItemMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: AddChecklistItemInput) => api.addChecklistItem(organizationId, projectId, taskId, input),
+    onSuccess: () => invalidateTasks(queryClient, organizationId, projectId),
+  });
+}
+
+export function useUpdateChecklistItemMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ itemId, input }: { itemId: string; input: UpdateChecklistItemInput }) =>
+      api.updateChecklistItem(organizationId, projectId, taskId, itemId, input),
+    onSuccess: () => invalidateTasks(queryClient, organizationId, projectId),
+  });
+}
+
+export function useDeleteChecklistItemMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (itemId: string) => api.deleteChecklistItem(organizationId, projectId, taskId, itemId),
+    onSuccess: () => invalidateTasks(queryClient, organizationId, projectId),
+  });
+}
+
+// ---- Risk register (PROJECT-level) -----------------------------------------
+export function useRisksQuery(organizationId: string, projectId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects", projectId, "risks"],
+    queryFn: () => api.listRisks(organizationId, projectId),
+    enabled: Boolean(organizationId) && Boolean(projectId),
+  });
+}
+
+export function useCreateRiskMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateRiskInput) => api.createRisk(organizationId, projectId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "risks"],
+      }),
+  });
+}
+
+export function useUpdateRiskMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ riskId, input }: { riskId: string; input: UpdateRiskInput }) =>
+      api.updateRisk(organizationId, projectId, riskId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "risks"],
+      }),
+  });
+}
+
+export function useDeleteRiskMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (riskId: string) => api.deleteRisk(organizationId, projectId, riskId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "risks"],
       }),
   });
 }

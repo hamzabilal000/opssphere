@@ -42,7 +42,12 @@ export function Sidebar() {
     <aside className="w-64 shrink-0 bg-brand text-white flex flex-col min-h-screen">
       <div className="px-4 py-5 border-b border-white/10">
         <p className="text-lg font-bold tracking-tight">OpsSphere</p>
-        <p className="text-xs text-slate-400">Day 6 — App Shell</p>
+        {/* Was a hardcoded "Day 6 — App Shell" build tag left over from
+            whichever day first built this shell - looked stale by the time
+            later days shipped (Day 11 already, still said Day 6). A plain,
+            permanent tagline doesn't go out of date the way a day-number
+            ever will. */}
+        <p className="text-xs text-slate-400">Operations Platform</p>
       </div>
 
       {/* Organization switcher */}

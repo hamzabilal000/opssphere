@@ -26,6 +26,8 @@ import type {
   UpdateTaskCommentInput,
   CreateTaskAttachmentInput,
   CreateTimeEntryInput,
+  AddChecklistItemInput,
+  UpdateChecklistItemInput,
 } from "@opssphere/validation";
 import type {
   SprintSummary,
@@ -35,6 +37,7 @@ import type {
   TaskAttachmentSummary,
   TimeEntrySummary,
 } from "@opssphere/shared-types";
+import type { ChecklistItemAttrs } from "./task.model.js";
 
 // ----------------------------------------------------------------------------
 // SHARED HELPERS
@@ -158,28 +161,62 @@ export async function deleteSprint(organizationId: string, projectId: string, sp
 // TASKS
 // ----------------------------------------------------------------------------
 // Turns a batch of Task documents into TaskSummary[], resolving every
-// assignee's email in ONE extra query (not one query per task) - same
-// "don't query inside a loop" principle every earlier day has used.
+// assignee's email AND every dependency's title/status in batched queries
+// (not one query per task) - same "don't query inside a loop" principle
+// every earlier day has used.
 async function toTaskSummaries(tasks: InstanceType<typeof Task>[]): Promise<TaskSummary[]> {
   const allAssigneeIds = tasks.flatMap((t) => t.assigneeIds.map((id) => id.toString()));
   const uniqueAssigneeIds = Array.from(new Set(allAssigneeIds));
   const users = uniqueAssigneeIds.length > 0 ? await User.find({ _id: { $in: uniqueAssigneeIds } }) : [];
   const emailByUserId = new Map(users.map((u) => [u._id.toString(), u.email]));
 
-  return tasks.map((t) => ({
-    id: t._id.toString(),
-    projectId: t.projectId.toString(),
-    sprintId: t.sprintId?.toString(),
-    parentTaskId: t.parentTaskId?.toString(),
-    title: t.title,
-    description: t.description,
-    status: t.status,
-    assigneeIds: t.assigneeIds.map((id) => id.toString()),
-    assigneeEmails: t.assigneeIds.map((id) => emailByUserId.get(id.toString()) ?? "unknown"),
-    dueDate: t.dueDate?.toISOString(),
-    position: t.position,
-    createdAt: t.createdAt.toISOString(),
-  }));
+  // DAY 11: one batched lookup for every dependency ID across every task in
+  // this batch, resolving each to { title, status } so the frontend never
+  // has to look a dependency up itself just to show its title.
+  const allDependencyIds = tasks.flatMap((t) => t.dependsOnTaskIds.map((id) => id.toString()));
+  const uniqueDependencyIds = Array.from(new Set(allDependencyIds));
+  const dependencyTasks =
+    uniqueDependencyIds.length > 0 ? await Task.find({ _id: { $in: uniqueDependencyIds } }) : [];
+  const dependencyById = new Map(dependencyTasks.map((d) => [d._id.toString(), d]));
+
+  return tasks.map((t) => {
+    const dependencies = t.dependsOnTaskIds.map((id) => {
+      const dep = dependencyById.get(id.toString());
+      return {
+        id: id.toString(),
+        title: dep?.title ?? "unknown",
+        status: (dep?.status ?? "todo") as TaskStatus,
+      };
+    });
+    const checklistItems = t.checklistItems.map((item) => ({
+      id: item._id.toString(),
+      text: item.text,
+      isDone: item.isDone,
+      createdAt: item.createdAt.toISOString(),
+    }));
+
+    return {
+      id: t._id.toString(),
+      projectId: t.projectId.toString(),
+      sprintId: t.sprintId?.toString(),
+      parentTaskId: t.parentTaskId?.toString(),
+      title: t.title,
+      description: t.description,
+      status: t.status,
+      assigneeIds: t.assigneeIds.map((id) => id.toString()),
+      assigneeEmails: t.assigneeIds.map((id) => emailByUserId.get(id.toString()) ?? "unknown"),
+      dueDate: t.dueDate?.toISOString(),
+      position: t.position,
+      dependencies,
+      isBlockedByDependencies: dependencies.some((d) => d.status !== "done"),
+      checklistItems,
+      checklistProgress: {
+        done: checklistItems.filter((item) => item.isDone).length,
+        total: checklistItems.length,
+      },
+      createdAt: t.createdAt.toISOString(),
+    };
+  });
 }
 
 export async function listTasks(organizationId: string, projectId: string): Promise<TaskSummary[]> {
@@ -262,10 +299,64 @@ export async function updateTask(
   if (input.title !== undefined) task.title = input.title;
   if (input.description !== undefined) task.description = input.description;
   if (input.dueDate !== undefined) task.dueDate = input.dueDate ?? undefined;
+
+  // DAY 11: dependencies. Validated in three steps - no self-dependency,
+  // every id actually belongs to this project, and adding them wouldn't
+  // create a cycle - see assertNoDependencyCycle below.
+  if (input.dependsOnTaskIds !== undefined) {
+    const uniqueIds = Array.from(new Set(input.dependsOnTaskIds));
+    if (uniqueIds.includes(taskId)) {
+      throw new ApiError(400, "VALIDATION_ERROR", "A task can't depend on itself.");
+    }
+    if (uniqueIds.length > 0) {
+      const matchingCount = await Task.countDocuments({ _id: { $in: uniqueIds }, projectId });
+      if (matchingCount !== uniqueIds.length) {
+        throw new ApiError(400, "VALIDATION_ERROR", "One or more dependencies don't belong to this project.");
+      }
+      await assertNoDependencyCycle(projectId, taskId, uniqueIds);
+    }
+    task.dependsOnTaskIds = uniqueIds.map((id) => new Types.ObjectId(id));
+  }
+
   await task.save();
 
   const [summary] = await toTaskSummaries([task]);
   return summary as TaskSummary;
+}
+
+// DAY 11: walks FORWARD through the dependency graph starting from the
+// candidate ids someone wants task `taskId` to depend on. If that walk
+// ever reaches `taskId` itself, adding the edge would close a loop (e.g.
+// A -> B -> A, or a longer A -> B -> C -> A) - reject it with a clear 400
+// instead of silently creating a dependency chain that can never resolve.
+// `visited` stops the walk from re-checking the same task twice, which
+// also protects against infinite looping if a cycle somehow already
+// existed in the data.
+async function assertNoDependencyCycle(
+  projectId: string,
+  taskId: string,
+  candidateDependsOnIds: string[]
+): Promise<void> {
+  const visited = new Set<string>();
+  const queue = [...candidateDependsOnIds];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift() as string;
+    if (currentId === taskId) {
+      throw new ApiError(
+        400,
+        "VALIDATION_ERROR",
+        "That dependency would create a cycle (this task would end up depending on itself, indirectly)."
+      );
+    }
+    if (visited.has(currentId)) continue;
+    visited.add(currentId);
+
+    const currentTask = await Task.findOne({ _id: currentId, projectId }).select("dependsOnTaskIds");
+    if (currentTask) {
+      queue.push(...currentTask.dependsOnTaskIds.map((id) => id.toString()));
+    }
+  }
 }
 
 // ----------------------------------------------------------------------------
@@ -293,6 +384,22 @@ export async function moveTask(
         "CONFLICT",
         `This task has ${openSubtasks} unfinished subtask(s) - complete those first.`
       );
+    }
+
+    // DAY 11: same idea, one level wider - a task can't be marked "done"
+    // while anything it explicitly depends on is still open either.
+    if (task.dependsOnTaskIds.length > 0) {
+      const openDependencies = await Task.countDocuments({
+        _id: { $in: task.dependsOnTaskIds },
+        status: { $ne: "done" },
+      });
+      if (openDependencies > 0) {
+        throw new ApiError(
+          409,
+          "CONFLICT",
+          `This task depends on ${openDependencies} task(s) that aren't done yet - finish those first.`
+        );
+      }
     }
   }
 
@@ -619,4 +726,78 @@ export async function deleteTimeEntry(
   }
 
   await entry.deleteOne();
+}
+
+// ----------------------------------------------------------------------------
+// CHECKLIST ITEMS  (DAY 11 — any active org member, no permission gate and
+// NO ownership concept at all - unlike comments/attachments/time entries,
+// an item doesn't even track who added it. A checklist is meant to feel
+// like a shared, disposable to-do list on the task, not a set of records
+// someone "owns" - see the Day 11 learning note for the full reasoning.)
+// ----------------------------------------------------------------------------
+export async function addChecklistItem(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  input: AddChecklistItemInput
+): Promise<TaskSummary> {
+  const task = await findTaskOrThrow(organizationId, projectId, taskId);
+
+  // TYPESCRIPT NOTE: TaskAttrs (task.model.ts) declares every ChecklistItemAttrs
+  // field as required, including `_id` and `createdAt` - but those two are
+  // exactly the fields Mongoose itself fills in the moment this gets pushed
+  // onto a real subdocument array, not something we know yet. The `as
+  // ChecklistItemAttrs` here just tells TypeScript "trust me, Mongoose completes
+  // this" - the same kind of small, deliberate cast every ORM-backed insert
+  // needs somewhere.
+  task.checklistItems.push({ text: input.text, isDone: false } as ChecklistItemAttrs);
+  await task.save();
+
+  const [summary] = await toTaskSummaries([task]);
+  return summary as TaskSummary;
+}
+
+export async function updateChecklistItem(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  itemId: string,
+  input: UpdateChecklistItemInput
+): Promise<TaskSummary> {
+  const task = await findTaskOrThrow(organizationId, projectId, taskId);
+  const item = task.checklistItems.find((i) => i._id.toString() === itemId);
+  if (!item) {
+    throw new ApiError(404, "RESOURCE_NOT_FOUND", "Checklist item not found.");
+  }
+
+  if (input.text !== undefined) item.text = input.text;
+  if (input.isDone !== undefined) item.isDone = input.isDone;
+  await task.save();
+
+  const [summary] = await toTaskSummaries([task]);
+  return summary as TaskSummary;
+}
+
+export async function deleteChecklistItem(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  itemId: string
+): Promise<TaskSummary> {
+  const task = await findTaskOrThrow(organizationId, projectId, taskId);
+  const remaining = task.checklistItems.filter((i) => i._id.toString() !== itemId);
+  if (remaining.length === task.checklistItems.length) {
+    throw new ApiError(404, "RESOURCE_NOT_FOUND", "Checklist item not found.");
+  }
+
+  // Reassigning the whole array (rather than a Mongoose-specific
+  // `.pull(...)` call) is deliberate - it works whether `checklistItems`
+  // is treated as a plain array or a Mongoose DocumentArray, and Mongoose
+  // marks a path modified correctly either way when you assign it a new
+  // value.
+  task.checklistItems = remaining;
+  await task.save();
+
+  const [summary] = await toTaskSummaries([task]);
+  return summary as TaskSummary;
 }

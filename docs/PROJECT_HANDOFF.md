@@ -24,7 +24,7 @@ currently present in the repo** — see §7 for what this means for you):
 - `OpsSphere_18_Day_Build_Schedule.pdf` — the day-by-day build plan.
 
 If you don't have these PDFs, §6 of this document reconstructs everything currently knowable about
-Days 11-18 from forward-looking hints already embedded in code comments and learning notes — treat
+Days 12-18 from forward-looking hints already embedded in code comments and learning notes — treat
 that reconstruction as a best-effort placeholder, not a confirmed spec, and say so if you use it.
 
 ---
@@ -51,7 +51,7 @@ that reconstruction as a best-effort placeholder, not a confirmed spec, and say 
 
 ---
 
-## 3. Repository structure (as of Day 10)
+## 3. Repository structure (as of Day 11)
 
 ```
 OpsSphere/
@@ -69,9 +69,12 @@ OpsSphere/
 │   │       │   ├── projects/        project, project-member, milestone models + service/controller/routes
 │   │       │   ├── tasks/           sprint, task, task-comment, task-attachment, time-entry models +
 │   │       │   │                    service/controller/routes  (Day 8, extended Day 9 with comment
-│   │       │   │                    edit/delete, @mentions, and socket event emission)
+│   │       │   │                    edit/delete, @mentions, and socket event emission; extended Day
+│   │       │   │                    11 with dependsOnTaskIds + embedded checklistItems on Task)
 │   │       │   ├── tickets/         ticket, ticket-comment models + service/controller/routes
-│   │       │   │                    (Day 10, newest module - ORG-level, not under a project)
+│   │       │   │                    (Day 10, ORG-level, not under a project)
+│   │       │   ├── risks/           risk model + service/controller/routes (Day 11, newest module -
+│   │       │   │                    PROJECT-level, unlike tickets - see risk.model.ts)
 │   │       │   └── health/          health.routes.ts
 │   │       ├── app.ts                createApp() — assembles Express app, mounts every router
 │   │       │                          (deliberately does NOT touch Socket.IO — see index.ts)
@@ -83,11 +86,12 @@ OpsSphere/
 │           │   ├── ui/               Button, Card, Input, States (Loading/Empty/Error), Toast
 │           │   ├── shell/            ProtectedRoute, AppShell, Sidebar, Topbar
 │           │   └── tasks/            TaskDetailModal (Day 8, extended Day 9 with comment edit/
-│           │                         delete + mention highlighting)
+│           │                         delete + mention highlighting; extended Day 11 with
+│           │                         Dependencies + Checklist sections)
 │           ├── Pages/                One file per route (RegisterPage, LoginPage, OverviewPage,
 │           │                         OrganizationDetailPage, ProjectsListPage, ProjectDetailPage,
 │           │                         TaskBoardPage, TicketsListPage, TicketDetailPage,
-│           │                         SessionsPage, ProfilePage, ...)
+│           │                         RiskRegisterPage (Day 11), SessionsPage, ProfilePage, ...)
 │           ├── lib/api.ts            Every fetch call to the backend, thin wrapper + typed functions
 │           ├── lib/queries.ts        Every useQuery/useMutation hook, built on lib/api.ts
 │           ├── lib/socket.ts         Day 9 — useProjectSocket() hook, one shared client connection
@@ -100,7 +104,7 @@ OpsSphere/
 │   ├── eslint-config/                Shared lint rules
 │   └── tsconfig/                     Shared base tsconfig
 ├── docs/
-│   ├── learning-notes/               01 through 10 (HTML, styled, one per completed day)
+│   ├── learning-notes/               01 through 11 (HTML, styled, one per completed day)
 │   └── PROJECT_HANDOFF.md            This file — keep it updated after every day (see §9)
 ├── docker-compose.yml               MongoDB, Valkey, Mailpit, MinIO
 └── README.md                        Currently STALE — still says "Day 1 of 18", update this
@@ -164,8 +168,20 @@ make the codebase feel inconsistent and will likely surprise whoever reads it ne
 - **Org-level vs. project-level modules**: most modules so far nest under a project
   (`projectId` on Task/Sprint). Day 10's Ticket deliberately does NOT — it only has an
   `organizationId`, mounted at the same route depth as `organizationRouter` itself, not under
-  `project.routes.ts`. Use this shape for anything that's a whole-company concern rather than
-  belonging to one specific project.
+  `project.routes.ts`. Day 11's Risk went back to PROJECT-level (like Task/Sprint) — the rule of
+  thumb: whole-company concern → org-level; belongs to one project's plan → project-level.
+- **Small embedded sub-lists live directly on their parent document, not as a new top-level
+  model** (Day 11's `Task.checklistItems`, a Mongoose subdocument array): reach for this when the
+  child only ever makes sense attached to one parent, is small, and doesn't need its own
+  permission model — same "keep it embedded" instinct as Day 8's `position` field. If a child
+  needs its own permission rules, ownership, or is queried independently of its parent, it should
+  still be a real top-level model (e.g. TaskComment) instead.
+- **Cycle detection**: Day 11's task dependencies (`dependsOnTaskIds`) introduced the first real
+  graph-walk in the codebase — `assertNoDependencyCycle` in `task.service.ts` walks forward
+  through the dependency graph before saving, rejecting anything that would let a task depend on
+  itself indirectly. If a future day adds another self-referential "this points at another one of
+  its own kind" relationship, this is the pattern to reuse (BFS with a `visited` set, checked
+  BEFORE the write, not after).
 
 **Real-time (Day 9 onward):**
 - `apps/api/src/lib/socket.ts` holds the ONE Socket.IO server instance (module-level variable,
@@ -345,7 +361,7 @@ and `TaskDetailModal.tsx` (comment edit/delete UI, mention highlighting). Vite's
 unused — a single server instance doesn't need Socket.IO's Redis adapter, only multi-instance
 deployments would.
 
-### ✅ Day 10 — Support Tickets (most recently completed)
+### ✅ Day 10 — Support Tickets
 `PERMISSIONS.TICKET_ASSIGN`, reserved and unused since Day 5, finally gets a real module. `Ticket`
 + `TicketComment` models — deliberately ORG-level (no `projectId`, unlike everything since Day 7),
 mounted at the same route depth as `organizationRouter`. Any active member can file a ticket and
@@ -362,19 +378,35 @@ live updates) — reusing Day 9's richer machinery here is a disclosed future up
 job. Frontend: `TicketsListPage.tsx` (status/"only mine" filters, a file-a-ticket form with no
 `canManage` gate) + `TicketDetailPage.tsx`, plus a new "Tickets" sidebar link.
 
+### ✅ Day 11 — Task Dependencies, Checklists & Risk Register (most recently completed)
+The three features the Day 8 comments explicitly deferred ("should have, not today's job"). Two
+live as new fields directly ON `Task` — `dependsOnTaskIds` (other tasks in the same project that
+must be "done" first; `task.service.ts`'s `assertNoDependencyCycle` walks the dependency graph
+forward before saving to reject any cycle, and `moveTask`'s existing "done" block was extended to
+also check open dependencies, same shape as its existing open-subtask check) and `checklistItems`
+(a Mongoose embedded subdocument array — a small to-do list with genuinely NO ownership concept at
+all, unlike comments/attachments/time-entries: any active member can add/toggle/rename/remove ANY
+item). The risk register is a real new module, `apps/api/src/modules/risks/` — deliberately
+PROJECT-level (like Task/Sprint), not org-level like Day 10's Ticket, since a risk belongs to one
+project's plan. `PERMISSIONS.RISK_MANAGE` is FLAT with no ownership exception (unlike Ticket) —
+tracking a risk's severity/status/mitigation plan is a coordinator-level activity. `riskScore`
+(1-9) is computed server-side from likelihood × impact, never stored, so it can't drift out of
+sync. Every checklist mutation reuses the EXISTING `SOCKET_EVENTS.TASK_UPDATED` event (no new event
+added) since a checklist item lives embedded on the task — the board's Day-9 live-update wiring
+picks it up with zero new frontend socket code. Frontend: `TaskDetailModal.tsx` gained
+Dependencies (toggleable chips + a "Blocked" badge) and Checklist sections; a new
+`RiskRegisterPage.tsx` is linked from `ProjectDetailPage.tsx`'s header, next to "Board."
+
 ---
 
-### ⚠️ Days 11-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
+### ⚠️ Days 12-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
 
 The schedule and build-guide PDFs referenced by the README are **not present in this repo**. What
-follows for Days 11-18 is reconstructed **only** from forward-looking comments already written into
-the Day 1-10 code and learning notes. Treat the day numbers below with **decreasing confidence** the
-further you go — Days 11-15 are educated guesses about ordering; Day 18 has zero hints anywhere.
+follows for Days 12-18 is reconstructed **only** from forward-looking comments already written into
+the Day 1-11 code and learning notes. Treat the day numbers below with **decreasing confidence** the
+further you go — Days 12-15 are educated guesses about ordering; Day 18 has zero hints anywhere.
 
-**Days 11-15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
-- **Task dependencies, checklists, and a risk register** — explicitly named by the SRS (per
-  multiple comments) as "should have, not today's job" as of Day 8. Task model would likely need a
-  `dependsOnTaskIds` field or similar; a risk register is probably its own new model entirely.
+**Days 12-15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
 - **Real file storage** — replacing Day 8's link-only attachments with actual uploads to the MinIO
   bucket that's been running unused since Day 1. Needs multipart upload parsing + an S3-compatible
   client (no such package in `apps/api/package.json` yet) + signed URL generation.
@@ -470,10 +502,10 @@ loops).** Never claim more confidence than what was actually run.
 
 ## 8. Current state / how to resume
 
-- Git: as of Day 10, the working tree has the Day 10 changes staged but **not yet committed** (the
+- Git: as of Day 11, the working tree has the Day 11 changes staged but **not yet committed** (the
   user has not asked for an automatic push since Day 7 — check `git log` and `git status` first
-  before assuming anything about what's actually committed; don't assume Days 8/9/10 are pushed
-  just because Day 7 was).
+  before assuming anything about what's actually committed; don't assume Days 8-11 are pushed just
+  because Day 7 was).
 - The README.md's "Status" line is stale (still says "Day 1 of 18") — worth fixing whenever
   convenient, it's a one-line change.
 - No `.env` file is assumed to exist in this sandbox — real local development (`pnpm dev` against
@@ -518,6 +550,6 @@ this file is a MAP for another AI picking up the project cold, not the whole ter
 ---
 
 **Bottom line for whoever picks this up next**: follow §5's rhythm exactly (including this file's
-own update step, §9), respect the conventions in §4 (they're consistent across 10,000+ lines of
+own update step, §9), respect the conventions in §4 (they're consistent across 11,000+ lines of
 code so far — don't introduce a different style), verify using §7's methodology, and be honest
-about the Day 11-18 uncertainty in §6 until you can get your hands on the real schedule PDF.
+about the Day 12-18 uncertainty in §6 until you can get your hands on the real schedule PDF.

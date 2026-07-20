@@ -20,6 +20,7 @@ import type {
   TimeEntrySummary,
   TicketSummary,
   TicketCommentSummary,
+  RiskSummary,
 } from "@opssphere/shared-types";
 import type {
   RegisterInput,
@@ -50,6 +51,10 @@ import type {
   AssignTicketInput,
   UpdateTicketStatusInput,
   CreateTicketCommentInput,
+  AddChecklistItemInput,
+  UpdateChecklistItemInput,
+  CreateRiskInput,
+  UpdateRiskInput,
 } from "@opssphere/validation";
 
 /**
@@ -623,4 +628,85 @@ export function createTicketComment(
     method: "POST",
     body: input,
   });
+}
+
+// ============================================================================
+// DAY 11 — TASK CHECKLISTS & RISK REGISTER
+// ----------------------------------------------------------------------------
+// (Task DEPENDENCIES reuse the existing updateTask() function above, not a
+// new endpoint - `dependsOnTaskIds` is just one more field on
+// UpdateTaskInput, see packages/validation.)
+// ============================================================================
+
+// ---- Checklist items --------------------------------------------------------
+// Every one of these returns the WHOLE updated task (not just the item) -
+// same idea as moveTask above, since checklistItems/checklistProgress live
+// on TaskSummary itself.
+export function addChecklistItem(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  input: AddChecklistItemInput
+): Promise<{ task: TaskSummary }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/checklist-items`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function updateChecklistItem(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  itemId: string,
+  input: UpdateChecklistItemInput
+): Promise<{ task: TaskSummary }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/checklist-items/${encodeURIComponent(itemId)}`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export function deleteChecklistItem(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  itemId: string
+): Promise<{ task: TaskSummary }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/checklist-items/${encodeURIComponent(itemId)}`, {
+    method: "DELETE",
+  });
+}
+
+// ---- Risk register (PROJECT-level, unlike Day 10's org-level tickets) -----
+function risksBase(organizationId: string, projectId: string): string {
+  return `${projectPath(organizationId, projectId)}/risks`;
+}
+
+export function listRisks(organizationId: string, projectId: string): Promise<{ risks: RiskSummary[] }> {
+  return apiRequest(risksBase(organizationId, projectId));
+}
+
+export function createRisk(
+  organizationId: string,
+  projectId: string,
+  input: CreateRiskInput
+): Promise<{ risk: RiskSummary }> {
+  return apiRequest(risksBase(organizationId, projectId), { method: "POST", body: input });
+}
+
+export function updateRisk(
+  organizationId: string,
+  projectId: string,
+  riskId: string,
+  input: UpdateRiskInput
+): Promise<{ risk: RiskSummary }> {
+  return apiRequest(`${risksBase(organizationId, projectId)}/${encodeURIComponent(riskId)}`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export function deleteRisk(organizationId: string, projectId: string, riskId: string): Promise<null> {
+  return apiRequest(`${risksBase(organizationId, projectId)}/${encodeURIComponent(riskId)}`, { method: "DELETE" });
 }

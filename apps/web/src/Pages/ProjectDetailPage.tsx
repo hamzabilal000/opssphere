@@ -9,7 +9,7 @@
 
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { Trash2, Plus, LayoutGrid } from "lucide-react";
+import { Trash2, Plus, LayoutGrid, ShieldAlert } from "lucide-react";
 import {
   useOrganizationQuery,
   useOrganizationMembersQuery,
@@ -133,6 +133,13 @@ export default function ProjectDetailPage() {
               className="flex items-center gap-1.5 text-sm rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-50"
             >
               <LayoutGrid className="w-4 h-4" /> Board
+            </Link>
+            {/* DAY 11 */}
+            <Link
+              to={`/dashboard/organizations/${organizationId}/projects/${projectId}/risks`}
+              className="flex items-center gap-1.5 text-sm rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-50"
+            >
+              <ShieldAlert className="w-4 h-4" /> Risks
             </Link>
             {canManage ? (
               <select

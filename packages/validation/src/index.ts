@@ -285,6 +285,13 @@ export const updateTaskSchema = z.object({
   sprintId: objectIdSchema.nullable().optional(), // null explicitly means "take this off its sprint"
   assigneeIds: z.array(objectIdSchema).optional(),
   dueDate: z.coerce.date().nullable().optional(),
+  // DAY 11: only settable via update, not at creation - a brand-new task
+  // rarely has known dependencies yet, and keeping createTaskSchema
+  // untouched means Day 8's create flow doesn't change at all. Cycle/
+  // same-project checks happen in task.service.ts, not here - Zod can only
+  // check SHAPE (an array of valid-looking ids), not whether those ids
+  // actually make sense together.
+  dependsOnTaskIds: z.array(objectIdSchema).optional(),
 });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 
@@ -365,3 +372,50 @@ export const createTicketCommentSchema = z.object({
   body: z.string().min(1, "Comment can't be empty").max(4000, "Comment is too long"),
 });
 export type CreateTicketCommentInput = z.infer<typeof createTicketCommentSchema>;
+
+// ============================================================================
+// DAY 11 — TASK CHECKLISTS & RISK REGISTER SCHEMAS
+// ----------------------------------------------------------------------------
+// (Task DEPENDENCIES reuse updateTaskSchema above, not a new schema here.)
+// ============================================================================
+
+export const addChecklistItemSchema = z.object({
+  text: z.string().min(1, "Checklist item can't be empty").max(300, "Checklist item is too long"),
+});
+export type AddChecklistItemInput = z.infer<typeof addChecklistItemSchema>;
+
+// Renaming an item and toggling it done are both just "PATCH this item" -
+// same one-endpoint idea as Day 7's updateMilestoneSchema (isComplete +
+// name in one schema) rather than two separate narrow endpoints.
+export const updateChecklistItemSchema = z.object({
+  text: z.string().min(1, "Checklist item can't be empty").max(300, "Checklist item is too long").optional(),
+  isDone: z.boolean().optional(),
+});
+export type UpdateChecklistItemInput = z.infer<typeof updateChecklistItemSchema>;
+
+const riskLikelihoodSchema = z.enum(["low", "medium", "high"]);
+const riskImpactSchema = z.enum(["low", "medium", "high"]);
+const riskStatusSchema = z.enum(["identified", "mitigating", "resolved", "accepted"]);
+
+export const createRiskSchema = z.object({
+  title: z.string().min(2, "Title must be at least 2 characters").max(200, "Title is too long"),
+  description: z.string().max(4000, "Description is too long").default(""),
+  likelihood: riskLikelihoodSchema.default("medium"),
+  impact: riskImpactSchema.default("medium"),
+  mitigationPlan: z.string().max(4000, "Mitigation plan is too long").default(""),
+  ownerId: objectIdSchema.optional(),
+});
+export type CreateRiskInput = z.infer<typeof createRiskSchema>;
+
+export const updateRiskSchema = z.object({
+  title: z.string().min(2, "Title must be at least 2 characters").max(200, "Title is too long").optional(),
+  description: z.string().max(4000, "Description is too long").optional(),
+  likelihood: riskLikelihoodSchema.optional(),
+  impact: riskImpactSchema.optional(),
+  status: riskStatusSchema.optional(),
+  mitigationPlan: z.string().max(4000, "Mitigation plan is too long").optional(),
+  // null explicitly means "unassign this risk" - same pattern as Day 10's
+  // assignTicketSchema.
+  ownerId: objectIdSchema.nullable().optional(),
+});
+export type UpdateRiskInput = z.infer<typeof updateRiskSchema>;

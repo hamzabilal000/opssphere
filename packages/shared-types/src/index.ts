@@ -232,6 +232,11 @@ export const PERMISSIONS = {
   // changing its status (the other half being "you're the ticket's
   // assignee" - see ticket.service.ts).
   TICKET_ASSIGN: "ticket.assign",
+  // DAY 11: governs create/update/delete on a project's risk register.
+  // Deliberately FLAT (no ownership exception, same reasoning as
+  // ticket.assign) - see risk.service.ts. Reading the register only needs
+  // membership, same split as sprint.manage.
+  RISK_MANAGE: "risk.manage",
 } as const;
 
 // TYPESCRIPT NOTE: `(typeof PERMISSIONS)[keyof typeof PERMISSIONS]` reads
@@ -318,8 +323,9 @@ export interface MilestoneSummary {
 // DAY 8 — TASKS, BOARD & SPRINTS TYPES
 // ----------------------------------------------------------------------------
 // "The actual day-to-day work surface of the app" (the SRS's own words).
-// Dependencies, checklists, and a risk register are explicitly deferred by
-// the SRS ("should have, not today's job") - what's here is the full loop:
+// Dependencies, checklists, and a risk register were explicitly deferred by
+// the SRS on Day 8 ("should have, not today's job") - they finally arrive
+// on Day 11, see the section below. What's here is the rest of the loop:
 // create a task, put it on a sprint, drag it across a board, comment on
 // it, log time, mark it done.
 // ============================================================================
@@ -354,6 +360,39 @@ export interface TaskSummary {
   // Where this card sits within its OWN status column, low-to-high. See
   // task.service.ts's moveTask for exactly how this gets maintained.
   position: number;
+  // DAY 11: which OTHER tasks (in the same project) this one can't be
+  // marked "done" until they're done themselves - see task.service.ts's
+  // assertNoDependencyCycle and moveTask. Resolved to title+status server-
+  // side (same "the frontend never looks anything up itself" idea as
+  // assigneeEmails above) so a card can show "blocked by: Fix the API"
+  // without a second round trip.
+  dependencies: TaskDependencySummary[];
+  // Computed server-side, once, from `dependencies` above - true whenever
+  // ANY dependency isn't done yet (same "compute once" idea as
+  // TaskCommentSummary's isEdited below).
+  isBlockedByDependencies: boolean;
+  // DAY 11: a simple to-do list living ON the task itself - no separate
+  // model, same "keep it embedded" spirit as Day 8's position field.
+  checklistItems: ChecklistItemSummary[];
+  checklistProgress: { done: number; total: number };
+  createdAt: string;
+}
+
+/** DAY 11: one entry in a task's `dependencies` list. */
+export interface TaskDependencySummary {
+  id: string;
+  title: string;
+  status: TaskStatus;
+}
+
+/** DAY 11: one row of a task's embedded checklist. Deliberately has NO
+ * author/ownership concept (unlike comments/attachments) - any active
+ * project member can add, check off, rename, or remove any item, see the
+ * Day 11 learning note for why that's a reasonable simplification here. */
+export interface ChecklistItemSummary {
+  id: string;
+  text: string;
+  isDone: boolean;
   createdAt: string;
 }
 
@@ -480,4 +519,41 @@ export interface TicketCommentSummary {
   authorEmail: string;
   body: string;
   createdAt: string;
+}
+
+// ============================================================================
+// DAY 11 — TASK DEPENDENCIES, CHECKLISTS & RISK REGISTER TYPES
+// ----------------------------------------------------------------------------
+// The three features the Day 8 comment above named as "should have, not
+// today's job." Dependencies and checklists both live as new fields on
+// TaskSummary (see above) - a risk register, unlike either of those, is a
+// genuinely separate concern (a project can have risks that never touch
+// any one task), so it gets its own model/module here, PROJECT-level (like
+// Task/Sprint, NOT org-level like Day 10's Ticket) - a risk is naturally
+// scoped to one project's plan, not a whole-company concern.
+// ============================================================================
+
+export type RiskLikelihood = "low" | "medium" | "high";
+export type RiskImpact = "low" | "medium" | "high";
+export type RiskStatus = "identified" | "mitigating" | "resolved" | "accepted";
+
+export interface RiskSummary {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string;
+  likelihood: RiskLikelihood;
+  impact: RiskImpact;
+  // Computed server-side from likelihood x impact (each low/medium/high
+  // worth 1/2/3), 1-9 - NEVER stored, so it can't drift out of sync with
+  // the two fields it's derived from. See risk.service.ts's LEVEL_SCORE.
+  riskScore: number;
+  status: RiskStatus;
+  mitigationPlan: string;
+  ownerId?: string;
+  ownerEmail?: string;
+  createdBy: string;
+  createdByEmail: string;
+  createdAt: string;
+  updatedAt: string;
 }

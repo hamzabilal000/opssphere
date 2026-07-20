@@ -30,6 +30,7 @@ import ProjectDetailPage from "./Pages/ProjectDetailPage";
 import TaskBoardPage from "./Pages/TaskBoardPage";
 import TicketsListPage from "./Pages/TicketsListPage";
 import TicketDetailPage from "./Pages/TicketDetailPage";
+import RiskRegisterPage from "./Pages/RiskRegisterPage";
 import SessionsPage from "./Pages/SessionsPage";
 import ProfilePage from "./Pages/ProfilePage";
 import { ProtectedRoute } from "./components/shell/ProtectedRoute";
@@ -62,6 +63,12 @@ export default function App() {
           <Route
             path="organizations/:organizationId/projects/:projectId/board"
             element={<TaskBoardPage />}
+          />
+          {/* Day 11: the risk register is PROJECT-level, same depth as the
+              board above - unlike tickets below. */}
+          <Route
+            path="organizations/:organizationId/projects/:projectId/risks"
+            element={<RiskRegisterPage />}
           />
           {/* Day 10: tickets are ORG-level, same nesting depth as
               "organizations/:organizationId" itself - not under a project. */}

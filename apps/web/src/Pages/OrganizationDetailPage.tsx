@@ -50,6 +50,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.TASK_MANAGE]: "Create/edit/delete/move tasks",
   [PERMISSIONS.SPRINT_MANAGE]: "Manage sprints",
   [PERMISSIONS.TICKET_ASSIGN]: "Assign support tickets",
+  [PERMISSIONS.RISK_MANAGE]: "Manage the project risk register",
 };
 
 export default function OrganizationDetailPage() {

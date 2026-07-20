@@ -35,6 +35,7 @@ import { organizationRouter } from "./modules/organizations/organization.routes.
 import { projectRouter } from "./modules/projects/project.routes.js";
 import { taskRouter } from "./modules/tasks/task.routes.js";
 import { ticketRouter } from "./modules/tickets/ticket.routes.js";
+import { riskRouter } from "./modules/risks/risk.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 // TYPESCRIPT NOTE: `export function createApp() { ... }` — a totally normal
@@ -116,6 +117,9 @@ export function createApp() {
   // tickets are ORG-level (no projectId in their URLs), same level as
   // organizationRouter itself.
   app.use("/api/v1/organizations", ticketRouter);
+  // DAY 11: risks are PROJECT-level (unlike tickets), same depth as
+  // taskRouter - "/:organizationId/projects/:projectId/risks/...".
+  app.use("/api/v1/organizations", riskRouter);
 
   // If NOTHING above matched the request's URL, this runs (see
   // middleware/errorHandler.ts for what it does).

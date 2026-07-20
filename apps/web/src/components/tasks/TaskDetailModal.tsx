@@ -9,7 +9,19 @@
 // ============================================================================
 
 import { useState, type ReactNode } from "react";
-import { X, Trash2, Plus, Clock, Paperclip, MessageSquare, ListTree, Pencil, Check } from "lucide-react";
+import {
+  X,
+  Trash2,
+  Plus,
+  Clock,
+  Paperclip,
+  MessageSquare,
+  ListTree,
+  Pencil,
+  Check,
+  GitBranch,
+  ListChecks,
+} from "lucide-react";
 import type { ProjectMemberSummary, SprintSummary, TaskCommentSummary, TaskSummary } from "@opssphere/shared-types";
 import {
   useUpdateTaskMutation,
@@ -25,6 +37,9 @@ import {
   useTimeEntriesQuery,
   useCreateTimeEntryMutation,
   useDeleteTimeEntryMutation,
+  useAddChecklistItemMutation,
+  useUpdateChecklistItemMutation,
+  useDeleteChecklistItemMutation,
   useMeQuery,
 } from "../../lib/queries";
 import { Button } from "../ui/Button";
@@ -107,6 +122,10 @@ export function TaskDetailModal({
   const createTimeEntryMutation = useCreateTimeEntryMutation(organizationId, projectId, task.id);
   const deleteTimeEntryMutation = useDeleteTimeEntryMutation(organizationId, projectId, task.id);
 
+  const addChecklistItemMutation = useAddChecklistItemMutation(organizationId, projectId, task.id);
+  const updateChecklistItemMutation = useUpdateChecklistItemMutation(organizationId, projectId, task.id);
+  const deleteChecklistItemMutation = useDeleteChecklistItemMutation(organizationId, projectId, task.id);
+
   const [description, setDescription] = useState(task.description);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [newComment, setNewComment] = useState("");
@@ -117,6 +136,7 @@ export function TaskDetailModal({
   const [newEntryMinutes, setNewEntryMinutes] = useState("");
   const [newEntryNote, setNewEntryNote] = useState("");
   const [newEntryDate, setNewEntryDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [newChecklistText, setNewChecklistText] = useState("");
 
   const subtasks = allTasks.filter((t) => t.parentTaskId === task.id);
   const comments = commentsQuery.data?.comments ?? [];
@@ -181,6 +201,48 @@ export function TaskDetailModal({
       });
       setNewSubtaskTitle("");
       toast("Subtask added.");
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
+  }
+
+  // DAY 11: dependencies reuse the exact same "toggle a checkbox, PATCH the
+  // whole array" idea as handleToggleAssignee above - dependsOnTaskIds is
+  // just one more field on updateTaskSchema.
+  async function handleToggleDependency(otherTaskId: string) {
+    const currentIds = task.dependencies.map((d) => d.id);
+    const nextIds = currentIds.includes(otherTaskId)
+      ? currentIds.filter((id) => id !== otherTaskId)
+      : [...currentIds, otherTaskId];
+    try {
+      await updateTaskMutation.mutateAsync({ taskId: task.id, input: { dependsOnTaskIds: nextIds } });
+    } catch (err) {
+      // Most likely task.service.ts's "would create a cycle" 400.
+      toast((err as Error).message, "error");
+    }
+  }
+
+  async function handleAddChecklistItem(e: React.FormEvent) {
+    e.preventDefault();
+    try {
+      await addChecklistItemMutation.mutateAsync({ text: newChecklistText });
+      setNewChecklistText("");
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
+  }
+
+  async function handleToggleChecklistItem(itemId: string, isDone: boolean) {
+    try {
+      await updateChecklistItemMutation.mutateAsync({ itemId, input: { isDone } });
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
+  }
+
+  async function handleDeleteChecklistItem(itemId: string) {
+    try {
+      await deleteChecklistItemMutation.mutateAsync(itemId);
     } catch (err) {
       toast((err as Error).message, "error");
     }
@@ -364,6 +426,110 @@ export function TaskDetailModal({
               )}
             </div>
           )}
+
+          {/* Dependencies (DAY 11) - which OTHER tasks in this project must
+              be "done" before this one can be marked done, see
+              task.service.ts's moveTask for the actual server-side block. */}
+          <div>
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 mb-2">
+              <GitBranch className="w-4 h-4" /> Dependencies
+              {task.isBlockedByDependencies && (
+                <span className="text-[11px] font-normal text-red-700 bg-red-50 border border-red-200 rounded-full px-2 py-0.5">
+                  Blocked
+                </span>
+              )}
+            </h3>
+            {task.dependencies.length === 0 && <EmptyState label="No dependencies yet." />}
+            <ul className="space-y-1 mb-2">
+              {task.dependencies.map((d) => (
+                <li key={d.id} className="flex items-center justify-between text-sm text-slate-700 py-1">
+                  <span>{d.title}</span>
+                  <span className={`text-xs ${d.status === "done" ? "text-teal-600" : "text-amber-600"}`}>
+                    {d.status.replace("_", " ")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            {canManage && (
+              <div className="flex flex-wrap gap-2">
+                {allTasks.filter((t) => t.id !== task.id).length === 0 && (
+                  <p className="text-xs text-slate-400">No other tasks in this project yet.</p>
+                )}
+                {allTasks
+                  .filter((t) => t.id !== task.id)
+                  .map((t) => {
+                    const isDependency = task.dependencies.some((d) => d.id === t.id);
+                    return (
+                      <label
+                        key={t.id}
+                        className={`flex items-center gap-1.5 text-xs rounded-full border px-2 py-1 cursor-pointer ${
+                          isDependency
+                            ? "bg-brand-teal/10 border-brand-teal text-brand-dark"
+                            : "border-slate-300 text-slate-600"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={isDependency}
+                          onChange={() => handleToggleDependency(t.id)}
+                        />
+                        {t.title}
+                      </label>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+
+          {/* Checklist (DAY 11) - deliberately NO canManage gate anywhere
+              here: any active member can add, check off, or remove an
+              item, see task.service.ts's comment on why a checklist has no
+              ownership concept, unlike comments/attachments/time entries. */}
+          <div>
+            <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 mb-2">
+              <ListChecks className="w-4 h-4" /> Checklist
+              {task.checklistProgress.total > 0 && (
+                <span className="text-xs font-normal text-slate-400">
+                  {task.checklistProgress.done}/{task.checklistProgress.total}
+                </span>
+              )}
+            </h3>
+            {task.checklistItems.length === 0 && <EmptyState label="No checklist items yet." />}
+            <ul className="space-y-1 mb-2">
+              {task.checklistItems.map((item) => (
+                <li key={item.id} className="flex items-center justify-between gap-2 text-sm">
+                  <label className="flex items-center gap-2 text-slate-700 flex-1">
+                    <input
+                      type="checkbox"
+                      checked={item.isDone}
+                      onChange={(e) => handleToggleChecklistItem(item.id, e.target.checked)}
+                    />
+                    <span className={item.isDone ? "line-through text-slate-400" : ""}>{item.text}</span>
+                  </label>
+                  <button
+                    onClick={() => handleDeleteChecklistItem(item.id)}
+                    className="text-red-600"
+                    aria-label="Delete checklist item"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <form onSubmit={handleAddChecklistItem} className="flex gap-2">
+              <Input
+                required
+                value={newChecklistText}
+                onChange={(e) => setNewChecklistText(e.target.value)}
+                placeholder="New checklist item"
+                className="flex-1"
+              />
+              <Button type="submit" disabled={addChecklistItemMutation.isPending}>
+                <Plus className="w-4 h-4" />
+              </Button>
+            </form>
+          </div>
 
           {/* Comments */}
           <div>

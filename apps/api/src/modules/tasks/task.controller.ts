@@ -16,6 +16,8 @@ import {
   updateTaskCommentSchema,
   createTaskAttachmentSchema,
   createTimeEntrySchema,
+  addChecklistItemSchema,
+  updateChecklistItemSchema,
 } from "@opssphere/validation";
 import { PERMISSIONS, SOCKET_EVENTS } from "@opssphere/shared-types";
 import type {
@@ -412,5 +414,82 @@ export async function deleteTimeEntryHandler(req: Request, res: Response) {
     canManageTasks(req)
   );
   const body: ApiSuccessResponse<null> = { success: true, message: "Time entry removed.", data: null };
+  res.status(200).json(body);
+}
+
+// ----------------------------------------------------------------------------
+// CHECKLIST ITEMS  (DAY 11 — any active org member, no permission gate)
+// ----------------------------------------------------------------------------
+// Every mutation here emits TASK_UPDATED with the whole (now-current) task -
+// reusing Day 9's existing event instead of inventing a new
+// CHECKLIST_CHANGED one, since a checklist item lives embedded ON the task
+// document itself; from a listener's point of view, "a checklist item
+// changed" and "the task changed" are the same fact.
+
+// POST /api/v1/organizations/:organizationId/projects/:projectId/tasks/:taskId/checklist-items
+export async function addChecklistItemHandler(req: Request, res: Response) {
+  const parsed = addChecklistItemSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, "VALIDATION_ERROR", "Validation failed", fieldErrorsFrom(parsed.error));
+  }
+
+  const task = await taskService.addChecklistItem(
+    req.organizationId ?? "",
+    String(req.params.projectId ?? ""),
+    String(req.params.taskId ?? ""),
+    parsed.data
+  );
+
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.TASK_UPDATED, { task });
+
+  const body: ApiSuccessResponse<{ task: TaskSummary }> = {
+    success: true,
+    message: "Checklist item added.",
+    data: { task },
+  };
+  res.status(201).json(body);
+}
+
+// PATCH /api/v1/organizations/:organizationId/projects/:projectId/tasks/:taskId/checklist-items/:itemId
+export async function updateChecklistItemHandler(req: Request, res: Response) {
+  const parsed = updateChecklistItemSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, "VALIDATION_ERROR", "Validation failed", fieldErrorsFrom(parsed.error));
+  }
+
+  const task = await taskService.updateChecklistItem(
+    req.organizationId ?? "",
+    String(req.params.projectId ?? ""),
+    String(req.params.taskId ?? ""),
+    String(req.params.itemId ?? ""),
+    parsed.data
+  );
+
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.TASK_UPDATED, { task });
+
+  const body: ApiSuccessResponse<{ task: TaskSummary }> = {
+    success: true,
+    message: "Checklist item updated.",
+    data: { task },
+  };
+  res.status(200).json(body);
+}
+
+// DELETE /api/v1/organizations/:organizationId/projects/:projectId/tasks/:taskId/checklist-items/:itemId
+export async function deleteChecklistItemHandler(req: Request, res: Response) {
+  const task = await taskService.deleteChecklistItem(
+    req.organizationId ?? "",
+    String(req.params.projectId ?? ""),
+    String(req.params.taskId ?? ""),
+    String(req.params.itemId ?? "")
+  );
+
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.TASK_UPDATED, { task });
+
+  const body: ApiSuccessResponse<{ task: TaskSummary }> = {
+    success: true,
+    message: "Checklist item removed.",
+    data: { task },
+  };
   res.status(200).json(body);
 }

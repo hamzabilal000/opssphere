@@ -43,6 +43,9 @@ import {
   listTimeEntriesHandler,
   createTimeEntryHandler,
   deleteTimeEntryHandler,
+  addChecklistItemHandler,
+  updateChecklistItemHandler,
+  deleteChecklistItemHandler,
 } from "./task.controller.js";
 import { requireAuth } from "../auth/auth.middleware.js";
 import { requireOrgMembership, requirePermission } from "../organizations/tenant.middleware.js";
@@ -144,3 +147,30 @@ taskRouter.delete(
   requireOrgMembership,
   deleteTimeEntryHandler
 );
+
+// ---- Checklist items (DAY 11 — any active member, no permission gate AND
+// no ownership check at all, unlike comments/attachments/time-entries -
+// see task.service.ts's comment on why) -------------------------------------
+taskRouter.post(
+  `${base}/tasks/:taskId/checklist-items`,
+  requireAuth,
+  requireOrgMembership,
+  addChecklistItemHandler
+);
+taskRouter.patch(
+  `${base}/tasks/:taskId/checklist-items/:itemId`,
+  requireAuth,
+  requireOrgMembership,
+  updateChecklistItemHandler
+);
+taskRouter.delete(
+  `${base}/tasks/:taskId/checklist-items/:itemId`,
+  requireAuth,
+  requireOrgMembership,
+  deleteChecklistItemHandler
+);
+
+// NOTE: task DEPENDENCIES (dependsOnTaskIds) have no routes of their own -
+// they're edited through the existing `PATCH .../tasks/:taskId` endpoint
+// above, gated by the same task.manage permission as every other task
+// detail. See updateTaskSchema in packages/validation for why.
