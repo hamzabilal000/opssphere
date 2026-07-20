@@ -217,6 +217,14 @@ export const PERMISSIONS = {
   PROJECT_CREATE: "project.create",
   PROJECT_MANAGE: "project.manage", // edit/archive a project, manage its milestones
   PROJECT_MEMBER_MANAGE: "project.member.manage", // add/remove people from a project
+  // DAY 8: create/edit/delete/move tasks and sprints. The SRS doesn't name
+  // these two specifically (only `project.create`/`ticket.assign` are
+  // given as examples) - they follow the same "module.action" pattern.
+  // Commenting, attaching links, and logging time are intentionally NOT
+  // behind a permission - any active org member can do those (see the
+  // Day 8 learning note for why that split makes sense).
+  TASK_MANAGE: "task.manage",
+  SPRINT_MANAGE: "sprint.manage",
   // Still reserved/unused - the SRS's other example permission string, for
   // a support-tickets module that doesn't exist yet.
   TICKET_ASSIGN: "ticket.assign",
@@ -299,5 +307,79 @@ export interface MilestoneSummary {
   name: string;
   dueDate: string;
   isComplete: boolean;
+  createdAt: string;
+}
+
+// ============================================================================
+// DAY 8 — TASKS, BOARD & SPRINTS TYPES
+// ----------------------------------------------------------------------------
+// "The actual day-to-day work surface of the app" (the SRS's own words).
+// Dependencies, checklists, and a risk register are explicitly deferred by
+// the SRS ("should have, not today's job") - what's here is the full loop:
+// create a task, put it on a sprint, drag it across a board, comment on
+// it, log time, mark it done.
+// ============================================================================
+
+export type SprintStatus = "planned" | "active" | "completed";
+
+export interface SprintSummary {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: SprintStatus;
+  createdAt: string;
+}
+
+/** The four Kanban columns. Not specified exactly by the SRS - this is a
+ * standard, small set that covers the "create, assign, drag across the
+ * board, comment, mark done" loop the Day 8 acceptance test describes. */
+export type TaskStatus = "todo" | "in_progress" | "in_review" | "done";
+
+export interface TaskSummary {
+  id: string;
+  projectId: string;
+  sprintId?: string;
+  parentTaskId?: string; // set only for a SUBTASK - see the Day 8 learning note
+  title: string;
+  description: string;
+  status: TaskStatus;
+  assigneeIds: string[];
+  assigneeEmails: string[]; // same order as assigneeIds - resolved server-side so the frontend never has to look users up itself
+  dueDate?: string;
+  // Where this card sits within its OWN status column, low-to-high. See
+  // task.service.ts's moveTask for exactly how this gets maintained.
+  position: number;
+  createdAt: string;
+}
+
+export interface TaskCommentSummary {
+  id: string;
+  authorId: string;
+  authorEmail: string;
+  body: string;
+  createdAt: string;
+}
+
+/** DAY 8 keeps this to a LINK, not a real uploaded file - see the Day 8
+ * learning note for why (real file storage via MinIO is a reasonable
+ * future upgrade, not something this environment can build AND verify in
+ * one day). */
+export interface TaskAttachmentSummary {
+  id: string;
+  name: string;
+  url: string;
+  uploadedBy: string;
+  uploadedByEmail: string;
+  createdAt: string;
+}
+
+export interface TimeEntrySummary {
+  id: string;
+  userId: string;
+  userEmail: string;
+  minutes: number;
+  note: string;
+  workDate: string;
   createdAt: string;
 }

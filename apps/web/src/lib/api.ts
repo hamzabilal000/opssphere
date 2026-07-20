@@ -12,6 +12,12 @@ import type {
   ProjectSummary,
   ProjectMemberSummary,
   MilestoneSummary,
+  SprintSummary,
+  TaskSummary,
+  TaskStatus,
+  TaskCommentSummary,
+  TaskAttachmentSummary,
+  TimeEntrySummary,
 } from "@opssphere/shared-types";
 import type {
   RegisterInput,
@@ -29,6 +35,13 @@ import type {
   AddProjectMemberInput,
   CreateMilestoneInput,
   UpdateMilestoneInput,
+  CreateSprintInput,
+  UpdateSprintInput,
+  CreateTaskInput,
+  UpdateTaskInput,
+  CreateTaskCommentInput,
+  CreateTaskAttachmentInput,
+  CreateTimeEntryInput,
 } from "@opssphere/validation";
 
 /**
@@ -341,4 +354,165 @@ export function deleteMilestone(organizationId: string, projectId: string, miles
     `${projectsBase(organizationId)}/${encodeURIComponent(projectId)}/milestones/${encodeURIComponent(milestoneId)}`,
     { method: "DELETE" }
   );
+}
+
+// ============================================================================
+// DAY 8 — SPRINTS, TASKS, COMMENTS, ATTACHMENTS & TIME ENTRIES
+// ============================================================================
+
+function projectPath(organizationId: string, projectId: string): string {
+  return `${projectsBase(organizationId)}/${encodeURIComponent(projectId)}`;
+}
+
+function taskPath(organizationId: string, projectId: string, taskId: string): string {
+  return `${projectPath(organizationId, projectId)}/tasks/${encodeURIComponent(taskId)}`;
+}
+
+// ---- Sprints ---------------------------------------------------------------
+export function listSprints(organizationId: string, projectId: string): Promise<{ sprints: SprintSummary[] }> {
+  return apiRequest(`${projectPath(organizationId, projectId)}/sprints`);
+}
+
+export function createSprint(
+  organizationId: string,
+  projectId: string,
+  input: CreateSprintInput
+): Promise<{ sprint: SprintSummary }> {
+  return apiRequest(`${projectPath(organizationId, projectId)}/sprints`, { method: "POST", body: input });
+}
+
+export function updateSprint(
+  organizationId: string,
+  projectId: string,
+  sprintId: string,
+  input: UpdateSprintInput
+): Promise<{ sprint: SprintSummary }> {
+  return apiRequest(`${projectPath(organizationId, projectId)}/sprints/${encodeURIComponent(sprintId)}`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export function deleteSprint(organizationId: string, projectId: string, sprintId: string): Promise<null> {
+  return apiRequest(`${projectPath(organizationId, projectId)}/sprints/${encodeURIComponent(sprintId)}`, {
+    method: "DELETE",
+  });
+}
+
+// ---- Tasks -------------------------------------------------------------------
+export function listTasks(organizationId: string, projectId: string): Promise<{ tasks: TaskSummary[] }> {
+  return apiRequest(`${projectPath(organizationId, projectId)}/tasks`);
+}
+
+export function createTask(
+  organizationId: string,
+  projectId: string,
+  input: CreateTaskInput
+): Promise<{ task: TaskSummary }> {
+  return apiRequest(`${projectPath(organizationId, projectId)}/tasks`, { method: "POST", body: input });
+}
+
+export function updateTask(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  input: UpdateTaskInput
+): Promise<{ task: TaskSummary }> {
+  return apiRequest(taskPath(organizationId, projectId, taskId), { method: "PATCH", body: input });
+}
+
+export function moveTask(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  status: TaskStatus
+): Promise<{ task: TaskSummary }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/move`, { method: "PATCH", body: { status } });
+}
+
+export function deleteTask(organizationId: string, projectId: string, taskId: string): Promise<null> {
+  return apiRequest(taskPath(organizationId, projectId, taskId), { method: "DELETE" });
+}
+
+// ---- Comments ------------------------------------------------------------
+export function listTaskComments(
+  organizationId: string,
+  projectId: string,
+  taskId: string
+): Promise<{ comments: TaskCommentSummary[] }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/comments`);
+}
+
+export function createTaskComment(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  input: CreateTaskCommentInput
+): Promise<{ comment: TaskCommentSummary }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/comments`, { method: "POST", body: input });
+}
+
+// ---- Attachments (link-based, see task-attachment.model.ts) --------------
+export function listTaskAttachments(
+  organizationId: string,
+  projectId: string,
+  taskId: string
+): Promise<{ attachments: TaskAttachmentSummary[] }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/attachments`);
+}
+
+export function createTaskAttachment(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  input: CreateTaskAttachmentInput
+): Promise<{ attachment: TaskAttachmentSummary }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/attachments`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function deleteTaskAttachment(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  attachmentId: string
+): Promise<null> {
+  return apiRequest(
+    `${taskPath(organizationId, projectId, taskId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: "DELETE" }
+  );
+}
+
+// ---- Time entries ----------------------------------------------------------
+export function listTimeEntries(
+  organizationId: string,
+  projectId: string,
+  taskId: string
+): Promise<{ entries: TimeEntrySummary[] }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/time-entries`);
+}
+
+export function createTimeEntry(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  input: CreateTimeEntryInput
+): Promise<{ entry: TimeEntrySummary }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/time-entries`, {
+    method: "POST",
+    body: input,
+  });
+}
+
+export function deleteTimeEntry(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  entryId: string
+): Promise<null> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/time-entries/${encodeURIComponent(entryId)}`, {
+    method: "DELETE",
+  });
 }

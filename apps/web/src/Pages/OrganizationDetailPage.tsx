@@ -47,6 +47,8 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   [PERMISSIONS.PROJECT_CREATE]: "Create projects",
   [PERMISSIONS.PROJECT_MANAGE]: "Manage projects (edit, archive, milestones)",
   [PERMISSIONS.PROJECT_MEMBER_MANAGE]: "Add/remove project members",
+  [PERMISSIONS.TASK_MANAGE]: "Create/edit/delete/move tasks",
+  [PERMISSIONS.SPRINT_MANAGE]: "Manage sprints",
   [PERMISSIONS.TICKET_ASSIGN]: "Assign tickets (reserved for a later day)",
 };
 

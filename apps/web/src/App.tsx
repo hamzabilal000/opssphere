@@ -27,6 +27,7 @@ import OverviewPage from "./Pages/OverviewPage";
 import OrganizationDetailPage from "./Pages/OrganizationDetailPage";
 import ProjectsListPage from "./Pages/ProjectsListPage";
 import ProjectDetailPage from "./Pages/ProjectDetailPage";
+import TaskBoardPage from "./Pages/TaskBoardPage";
 import SessionsPage from "./Pages/SessionsPage";
 import ProfilePage from "./Pages/ProfilePage";
 import { ProtectedRoute } from "./components/shell/ProtectedRoute";
@@ -54,6 +55,11 @@ export default function App() {
           <Route
             path="organizations/:organizationId/projects/:projectId"
             element={<ProjectDetailPage />}
+          />
+          {/* Day 8: the Kanban board lives one level deeper under its project */}
+          <Route
+            path="organizations/:organizationId/projects/:projectId/board"
+            element={<TaskBoardPage />}
           />
           <Route path="sessions" element={<SessionsPage />} />
           <Route path="profile" element={<ProfilePage />} />

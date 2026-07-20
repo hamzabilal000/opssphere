@@ -8,8 +8,8 @@
 // ============================================================================
 
 import { useState } from "react";
-import { useParams } from "react-router-dom";
-import { Trash2, Plus } from "lucide-react";
+import { useParams, Link } from "react-router-dom";
+import { Trash2, Plus, LayoutGrid } from "lucide-react";
 import {
   useOrganizationQuery,
   useOrganizationMembersQuery,
@@ -127,19 +127,27 @@ export default function ProjectDetailPage() {
       <div>
         <div className="flex items-center justify-between gap-2">
           <h1 className="text-2xl font-bold text-slate-900">{project.name}</h1>
-          {canManage ? (
-            <select
-              value={project.status}
-              onChange={(e) => handleStatusChange(e.target.value as ProjectStatus)}
-              className="border border-slate-300 rounded-md px-2 py-1 text-sm"
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/dashboard/organizations/${organizationId}/projects/${projectId}/board`}
+              className="flex items-center gap-1.5 text-sm rounded-md border border-slate-300 px-3 py-1.5 text-slate-700 hover:bg-slate-50"
             >
-              <option value="active">Active</option>
-              <option value="completed">Completed</option>
-              <option value="archived">Archived</option>
-            </select>
-          ) : (
-            <span className="text-sm text-slate-500">{project.status}</span>
-          )}
+              <LayoutGrid className="w-4 h-4" /> Board
+            </Link>
+            {canManage ? (
+              <select
+                value={project.status}
+                onChange={(e) => handleStatusChange(e.target.value as ProjectStatus)}
+                className="border border-slate-300 rounded-md px-2 py-1 text-sm"
+              >
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="archived">Archived</option>
+              </select>
+            ) : (
+              <span className="text-sm text-slate-500">{project.status}</span>
+            )}
+          </div>
         </div>
         {project.description && <p className="text-slate-500 text-sm mt-1">{project.description}</p>}
       </div>

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 08 — Tasks, Board & Sprints</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 8 OF 18</div>
+  <h1>Tasks, Board &amp; Sprints</h1>
+  <p class="sub">The actual day-to-day work surface of the app - create a task, put it on a sprint,
+  drag it across a board, comment on it, log time, mark it done.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Day 7 gave OpsSphere Projects and the people on them. Today gives those projects something to
+DO - Tasks (with subtasks), a real Kanban board with drag-and-drop, a lightweight Sprint model,
+comments, link attachments, and manual time entries. The SRS explicitly defers dependencies,
+checklists, and a risk register to later ("should have, not today's job") - what's here is the
+full loop the Day 8 acceptance test asks for: create, assign, drag across the board, comment, mark
+done.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every new file has comments explaining what's new - especially <code>task.service.ts</code>'s
+  <code>moveTask</code>, which is where the one real business rule for today lives.
+</div>
+
+<h2>Four design decisions worth understanding</h2>
+
+<h3>1. A subtask is just a Task pointing at another Task</h3>
+<p>There's no separate "Subtask" model. <code>Task</code> has an optional <code>parentTaskId</code> -
+when it's set, that task is a subtask of whichever task it points to. This means subtasks get
+everything a normal task gets for free (their own status, assignees, comments, time entries)
+without building a second, parallel model that duplicates most of the same fields.</p>
+
+<h3>2. The board's four columns aren't in the SRS - they're a reasonable, small default</h3>
+<p><code>TaskStatus</code> is <code>"todo" | "in_progress" | "in_review" | "done"</code>. The SRS
+asks for "a Kanban board with drag-and-drop" but doesn't name exact columns - four is a standard,
+small set that supports the acceptance test's full loop without inventing workflow states nobody
+asked for.</p>
+
+<h3>3. The one real server-validated rule: can't finish a task with open subtasks</h3>
+<p>Dragging a card to "Done" calls <code>moveTask</code>, which checks: does this task have any
+subtask that ISN'T done yet? If so, it comes back with a clean 409, the same shape every other
+"blocked action" in this project uses (Day 5's role deletion, Day 7's milestone... actually
+Day 7 didn't need one - Day 4's "last owner can't demote themselves" is the closest precedent).
+The frontend never has to know this rule exists - the drag either succeeds or the drop bounces
+back with a clear message.</p>
+
+<h3>4. Attachments are links, not uploaded files - on purpose</h3>
+<p>A real "upload a file" feature means multipart parsing, an S3-compatible client, and wiring up
+the MinIO bucket that's been sitting unused in <code>docker-compose.yml</code> since Day 1 - a
+legitimate next step, but new infrastructure this environment can't actually spin up AND verify in
+one day. Storing a name + URL still delivers the real feature ("attach something to a task")
+honestly, instead of quietly skipping verification on a half-built upload pipe.</p>
+
+<h2>The permission split, explained</h2>
+<p>Two new permissions: <code>task.manage</code> (create/edit/delete/move a task) and
+<code>sprint.manage</code> (create/edit/delete a sprint). Comments, attachments, and time entries
+are deliberately NOT behind a permission - any active org member can post a comment, attach a
+link, or log their own time, the same way anyone on a real team can. Deleting someone else's
+comment isn't built at all yet (Day 8 keeps comments append-only); deleting an attachment or time
+entry is allowed for whoever created it, OR someone with <code>task.manage</code> - the same
+"ownership OR elevated permission" shape Day 3's session revocation already established.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext"><b>You open a project</b> and click the new "Board" link.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>You add a task.</b> It appears at the bottom of the To Do column.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>You click the card</b>, assign it to a project member, add a subtask, and post a comment.</div></div>
+<div class="step"><div class="num">4</div><div class="stext"><b>You drag the card</b> to In Progress, then In Review, then Done - each drop is a real API call under the hood.</div></div>
+<div class="step"><div class="num">5</div><div class="stext"><b>If it still has an open subtask</b>, the drop to Done bounces back with a clear error instead of silently succeeding.</div></div>
+
+<h2>The new files, in one picture</h2>
+<pre><code>apps/api/src/modules/tasks/
+├── sprint.model.ts            <span style="color:#7be9d8">→ a dated work window within a project</span>
+├── task.model.ts               <span style="color:#7be9d8">→ the work item - status, assignees, position, parentTaskId</span>
+├── task-comment.model.ts        <span style="color:#7be9d8">→ a comment on a task</span>
+├── task-attachment.model.ts      <span style="color:#7be9d8">→ a NAME + URL, not a real uploaded file</span>
+├── time-entry.model.ts            <span style="color:#7be9d8">→ minutes + note + workDate, no billable/rate fields</span>
+├── task.service.ts                 <span style="color:#7be9d8">→ sprints, tasks, moveTask, comments, attachments, time</span>
+├── task.controller.ts               <span style="color:#7be9d8">→ same 3-step shape as every other controller</span>
+└── task.routes.ts                    <span style="color:#7be9d8">→ mounted one level deeper than project.routes.ts</span>
+
+apps/web/src/
+├── Pages/TaskBoardPage.tsx     <span style="color:#7be9d8">→ the four-column board + drag-and-drop + sprint filter</span>
+└── components/tasks/TaskDetailModal.tsx <span style="color:#7be9d8">→ subtasks, comments, attachments, time entries</span></code></pre>
+
+<h2>A design detail worth understanding: why the board only shows top-level cards</h2>
+<div class="callout amber">
+  <strong class="title">Subtasks live inside the modal, not as their own column cards</strong>
+  Every task returned by <code>listTasks</code> is on the board - including subtasks - but
+  <code>TaskBoardPage.tsx</code> filters to only <code>!task.parentTaskId</code> before rendering
+  columns. Putting both a task AND its subtasks as separate cards on the same four columns gets
+  visually confusing fast (which card belongs to which parent?). Subtasks instead show as a short
+  checklist inside their parent's detail modal - simpler to look at, and the "can't finish with
+  open subtasks" rule is naturally visible right where you'd manage them.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>Dragging a card always appends it to the END of the target column - not "insert at this
+  exact position and shift every other card." <code>position</code> is a plain number set by
+  counting existing cards in the target column; true reordering-within-a-column is a reasonable
+  future upgrade.</li>
+  <li>No task dependencies, checklists, or a risk register - the SRS names these as "should have,"
+  not today's job.</li>
+  <li>Comments can't be edited or deleted, and there's no @mentions - that's a Day 9+ "Real-Time"
+  feature per the SRS, not today's.</li>
+  <li>Subtasks only go one level deep in the board UI (a subtask's OWN subtasks, if you made any
+  via the API directly, wouldn't get a nested checklist in the modal) - the backend doesn't
+  actually stop deeper nesting, this is a frontend display simplification only.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> (no new packages today).</li>
+  <li>Run <code>pnpm dev</code>, log in, select an organization, open a project.</li>
+  <li>Click "Board," add a task, click it, assign it to yourself, add a subtask.</li>
+  <li>Drag the task across the columns to Done - try it WITH the subtask still open first, to see
+  the 409 rule fire, then mark the subtask done and try again.</li>
+  <li>Post a comment, attach a link, and log some time on the task from its detail panel.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every package (shared-types, validation, api, web) compiles with no TypeScript errors (checked in a sandbox copy, after fixing three real errors <code>tsc</code> caught: a permission-label map missing the two new Day 8 permissions, and two frontend task-create calls missing the required <code>description</code> field)</td><td>✅ Confirmed</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) completes with no errors - 1,662 modules bundled successfully</td><td>✅ Confirmed</td></tr>
+  <tr><td>All 17 new sprint/task/comment/attachment/time-entry routes correctly reject requests with no login cookie, and an unknown route still returns a clean 404</td><td>✅ Confirmed (18/18 checks passed, tested without a database)</td></tr>
+  <tr><td>The full create-task → assign → drag-across-the-board → comment → mark-done loop, against a real database</td><td>⏳ Needs you to test it locally (see steps above)</td></tr>
+  <tr><td>The "can't mark done with an open subtask" 409 rule, exercised end to end</td><td>⏳ Needs you to test it locally - traced by hand in <code>task.service.ts</code>'s <code>moveTask</code>, not run against a live database</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Day 9 moves into real-time features - the SRS's next module builds on top of the tasks and
+comments started here (things like live updates and @mentions land on this same foundation).</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 08 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

@@ -244,3 +244,73 @@ export const updateMilestoneSchema = z.object({
   isComplete: z.boolean().optional(),
 });
 export type UpdateMilestoneInput = z.infer<typeof updateMilestoneSchema>;
+
+// ============================================================================
+// DAY 8 — SPRINTS, TASKS, COMMENTS, ATTACHMENTS & TIME ENTRIES SCHEMAS
+// ============================================================================
+
+export const createSprintSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(120, "Name is too long"),
+  startDate: z.coerce.date(),
+  endDate: z.coerce.date(),
+}).refine((data) => data.endDate >= data.startDate, {
+  message: "End date must be on or after the start date",
+  path: ["endDate"],
+});
+export type CreateSprintInput = z.infer<typeof createSprintSchema>;
+
+export const updateSprintSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(120, "Name is too long").optional(),
+  startDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
+  status: z.enum(["planned", "active", "completed"]).optional(),
+});
+export type UpdateSprintInput = z.infer<typeof updateSprintSchema>;
+
+const taskStatusSchema = z.enum(["todo", "in_progress", "in_review", "done"]);
+
+export const createTaskSchema = z.object({
+  title: z.string().min(2, "Title must be at least 2 characters").max(200, "Title is too long"),
+  description: z.string().max(4000, "Description is too long").default(""),
+  sprintId: objectIdSchema.optional(),
+  parentTaskId: objectIdSchema.optional(),
+  assigneeIds: z.array(objectIdSchema).default([]),
+  dueDate: z.coerce.date().optional(),
+});
+export type CreateTaskInput = z.infer<typeof createTaskSchema>;
+
+export const updateTaskSchema = z.object({
+  title: z.string().min(2, "Title must be at least 2 characters").max(200, "Title is too long").optional(),
+  description: z.string().max(4000, "Description is too long").optional(),
+  sprintId: objectIdSchema.nullable().optional(), // null explicitly means "take this off its sprint"
+  assigneeIds: z.array(objectIdSchema).optional(),
+  dueDate: z.coerce.date().nullable().optional(),
+});
+export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
+
+// The drag-and-drop endpoint's body - deliberately separate from
+// updateTaskSchema above. Moving a card is a narrower, more frequent
+// action than editing a task's details, and keeping its own schema means
+// the move route can't accidentally be used to sneak in a title change.
+export const moveTaskSchema = z.object({
+  status: taskStatusSchema,
+});
+export type MoveTaskInput = z.infer<typeof moveTaskSchema>;
+
+export const createTaskCommentSchema = z.object({
+  body: z.string().min(1, "Comment can't be empty").max(4000, "Comment is too long"),
+});
+export type CreateTaskCommentInput = z.infer<typeof createTaskCommentSchema>;
+
+export const createTaskAttachmentSchema = z.object({
+  name: z.string().min(1, "Name is required").max(200, "Name is too long"),
+  url: z.string().url("Enter a valid URL"),
+});
+export type CreateTaskAttachmentInput = z.infer<typeof createTaskAttachmentSchema>;
+
+export const createTimeEntrySchema = z.object({
+  minutes: z.coerce.number().int().min(1, "Must be at least 1 minute").max(1440, "Can't exceed 24 hours in one entry"),
+  note: z.string().max(500, "Note is too long").default(""),
+  workDate: z.coerce.date(),
+});
+export type CreateTimeEntryInput = z.infer<typeof createTimeEntrySchema>;

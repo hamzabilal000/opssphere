@@ -36,7 +36,15 @@ import type {
   AddProjectMemberInput,
   CreateMilestoneInput,
   UpdateMilestoneInput,
+  CreateSprintInput,
+  UpdateSprintInput,
+  CreateTaskInput,
+  UpdateTaskInput,
+  CreateTaskCommentInput,
+  CreateTaskAttachmentInput,
+  CreateTimeEntryInput,
 } from "@opssphere/validation";
+import type { TaskStatus } from "@opssphere/shared-types";
 
 // ----------------------------------------------------------------------------
 // ME / AUTH
@@ -327,6 +335,186 @@ export function useDeleteMilestoneMutation(organizationId: string, projectId: st
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: ["organizations", organizationId, "projects", projectId, "milestones"],
+      }),
+  });
+}
+
+// ----------------------------------------------------------------------------
+// DAY 8 — SPRINTS, TASKS, COMMENTS, ATTACHMENTS & TIME ENTRIES
+// ----------------------------------------------------------------------------
+
+// ---- Sprints -----------------------------------------------------------
+export function useSprintsQuery(organizationId: string, projectId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects", projectId, "sprints"],
+    queryFn: () => api.listSprints(organizationId, projectId),
+    enabled: Boolean(organizationId) && Boolean(projectId),
+  });
+}
+
+export function useCreateSprintMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateSprintInput) => api.createSprint(organizationId, projectId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "sprints"],
+      }),
+  });
+}
+
+export function useUpdateSprintMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ sprintId, input }: { sprintId: string; input: UpdateSprintInput }) =>
+      api.updateSprint(organizationId, projectId, sprintId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "sprints"],
+      }),
+  });
+}
+
+export function useDeleteSprintMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sprintId: string) => api.deleteSprint(organizationId, projectId, sprintId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "sprints"],
+      }),
+  });
+}
+
+// ---- Tasks (the board) ------------------------------------------------------
+export function useTasksQuery(organizationId: string, projectId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects", projectId, "tasks"],
+    queryFn: () => api.listTasks(organizationId, projectId),
+    enabled: Boolean(organizationId) && Boolean(projectId),
+  });
+}
+
+export function useCreateTaskMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTaskInput) => api.createTask(organizationId, projectId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects", projectId, "tasks"] }),
+  });
+}
+
+export function useUpdateTaskMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, input }: { taskId: string; input: UpdateTaskInput }) =>
+      api.updateTask(organizationId, projectId, taskId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects", projectId, "tasks"] }),
+  });
+}
+
+// The drag-and-drop mutation - kept separate from useUpdateTaskMutation so a
+// board column drop only ever sends `{ status }`, matching the backend's
+// deliberately-narrow moveTaskSchema (see task.routes.ts).
+export function useMoveTaskMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ taskId, status }: { taskId: string; status: TaskStatus }) =>
+      api.moveTask(organizationId, projectId, taskId, status),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects", projectId, "tasks"] }),
+  });
+}
+
+export function useDeleteTaskMutation(organizationId: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (taskId: string) => api.deleteTask(organizationId, projectId, taskId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects", projectId, "tasks"] }),
+  });
+}
+
+// ---- Comments --------------------------------------------------------------
+export function useTaskCommentsQuery(organizationId: string, projectId: string, taskId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "comments"],
+    queryFn: () => api.listTaskComments(organizationId, projectId, taskId),
+    enabled: Boolean(organizationId) && Boolean(projectId) && Boolean(taskId),
+  });
+}
+
+export function useCreateTaskCommentMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTaskCommentInput) => api.createTaskComment(organizationId, projectId, taskId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "comments"],
+      }),
+  });
+}
+
+// ---- Attachments -------------------------------------------------------------
+export function useTaskAttachmentsQuery(organizationId: string, projectId: string, taskId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "attachments"],
+    queryFn: () => api.listTaskAttachments(organizationId, projectId, taskId),
+    enabled: Boolean(organizationId) && Boolean(projectId) && Boolean(taskId),
+  });
+}
+
+export function useCreateTaskAttachmentMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTaskAttachmentInput) =>
+      api.createTaskAttachment(organizationId, projectId, taskId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "attachments"],
+      }),
+  });
+}
+
+export function useDeleteTaskAttachmentMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (attachmentId: string) => api.deleteTaskAttachment(organizationId, projectId, taskId, attachmentId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "attachments"],
+      }),
+  });
+}
+
+// ---- Time entries ----------------------------------------------------------
+export function useTimeEntriesQuery(organizationId: string, projectId: string, taskId: string) {
+  return useQuery({
+    queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "time-entries"],
+    queryFn: () => api.listTimeEntries(organizationId, projectId, taskId),
+    enabled: Boolean(organizationId) && Boolean(projectId) && Boolean(taskId),
+  });
+}
+
+export function useCreateTimeEntryMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTimeEntryInput) => api.createTimeEntry(organizationId, projectId, taskId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "time-entries"],
+      }),
+  });
+}
+
+export function useDeleteTimeEntryMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (entryId: string) => api.deleteTimeEntry(organizationId, projectId, taskId, entryId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "time-entries"],
       }),
   });
 }
