@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 09 — Real-Time</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 9 OF 18</div>
+  <h1>Real-Time</h1>
+  <p class="sub">Everything built so far asks the server a question and waits for one answer.
+  Today the server learns to speak first.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Days 1-8 are entirely "request/response" - your browser asks, the server answers once, done.
+Today adds a second, genuinely different shape of communication: a connection that stays open, so
+the server can push a message to your browser WITHOUT you asking first. Two features ride on top of
+it: comments can finally be edited and deleted (with an "(edited)" label), and typing
+<code>@someone@example.com</code> in a comment tags them. But the headline feature is what happens
+when someone else, on another browser, moves a card on the SAME board you're looking at - you see
+it move too, instantly, with no refresh.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every file involved has comments explaining what's new - especially
+  <code>apps/api/src/lib/socket.ts</code>, since "a connection that stays open" is a genuinely new
+  concept, not just a new feature built the same way as every day before it.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. WebSockets vs. HTTP - a connection that stays open</h3>
+<p>Every request you've built until now opens a connection, sends one thing, gets one answer back,
+and closes - even "real-time-feeling" apps you've built before probably worked by re-asking the
+server every few seconds ("polling"). Socket.IO instead keeps ONE connection open between your
+browser and the server for as long as the page is open, over which either side can send a message
+to the other AT ANY TIME. The server "pushing" you a message it wasn't asked for is the entire new
+capability today unlocks.</p>
+
+<h3>2. Rooms - broadcasting to exactly the right audience</h3>
+<p>A connected socket isn't listening to anything by default - it has to "join a room" first, which
+is really just a string name (here, <code>project:&lt;id&gt;</code>). When a task moves,
+the server broadcasts to that ONE room, not to every connected browser everywhere - someone looking
+at a totally different project's board never hears about it. See
+<code>projectRoom()</code>/<code>emitToProject()</code> in <code>lib/socket.ts</code>.</p>
+
+<h3>3. The socket handshake gets the EXACT same auth check as every HTTP route</h3>
+<p>There's no separate "socket login." The very same access token cookie <code>requireAuth</code>
+checks on every HTTP request (see <code>auth.middleware.ts</code>) gets read and verified during the
+socket connection handshake too, in <code>io.use(...)</code> - a Socket.IO "middleware" that runs
+before a connection is even accepted, the same idea as Express middleware. And just like
+<code>requireOrgMembership</code> re-checks a real Membership row before trusting an organization
+id in a URL (Day 4's golden rule), the <code>join-project</code> handler re-checks a real Membership
+row before letting a socket into a project's room - a stolen or guessed project id can't be used to
+eavesdrop on a board you don't actually have access to.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext"><b>You open a project's board.</b> <code>TaskBoardPage</code> connects a socket and asks to join that project's room - a small "Live" badge in the header confirms it worked.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><b>A teammate, on a different browser, drags a card</b> on the SAME board.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><b>Their move succeeds normally</b> - same <code>PATCH .../tasks/:id/move</code> call as Day 8, same 409 rule if the task still has open subtasks.</div></div>
+<div class="step"><div class="num">4</div><div class="stext"><b>The server broadcasts <code>task:moved</code></b> to the project's room, right after the database write succeeds.</div></div>
+<div class="step"><div class="num">5</div><div class="stext"><b>Your browser receives it</b> and quietly tells TanStack Query "that data's stale, go re-fetch it" - the exact same cache-invalidation mechanism Day 6 built for your OWN mutations, just triggered by someone ELSE's action this time. The card moves on your screen with no page refresh.</div></div>
+<div class="step"><div class="num">6</div><div class="stext"><b>Meanwhile, in a comment,</b> you type <code>@teammate@example.com looks good</code> - the mention gets detected, highlighted, and the comment can be edited or deleted later (by you, or anyone with <code>task.manage</code>).</div></div>
+
+<h2>The new files, in one picture</h2>
+<pre><code>apps/api/src/lib/socket.ts    <span style="color:#7be9d8">→ Socket.IO server: auth handshake, rooms, emitToProject()</span>
+apps/api/src/index.ts          <span style="color:#7be9d8">→ UPDATED: builds a raw http.Server so Socket.IO can share</span>
+                                  <span style="color:#7be9d8">  the same port as Express, instead of app.listen() directly</span>
+apps/api/src/modules/tasks/
+├── task-comment.model.ts       <span style="color:#7be9d8">→ UPDATED: mentionedUserIds[], real updatedAt tracking</span>
+├── task.service.ts              <span style="color:#7be9d8">→ UPDATED: detectMentions, updateComment, deleteComment</span>
+├── task.controller.ts            <span style="color:#7be9d8">→ UPDATED: emitToProject(...) after every task/comment write</span>
+└── task.routes.ts                 <span style="color:#7be9d8">→ UPDATED: PATCH/DELETE .../comments/:commentId</span>
+
+apps/web/src/lib/socket.ts     <span style="color:#7be9d8">→ useProjectSocket() - the frontend half of the connection</span>
+apps/web/src/Pages/TaskBoardPage.tsx        <span style="color:#7be9d8">→ UPDATED: live board updates + a "Live" badge</span>
+apps/web/src/components/tasks/TaskDetailModal.tsx <span style="color:#7be9d8">→ UPDATED: comment edit/delete, mention highlighting</span></code></pre>
+
+<h2>A design detail worth understanding: why mentions are just "@" + an exact email</h2>
+<div class="callout amber">
+  <strong class="title">No autocomplete picker today - on purpose</strong>
+  A real "@" mention experience needs a dropdown that filters project members as you type, arrow-key
+  navigation, and inserting the right token into the textarea at the cursor position - genuine,
+  fiddly frontend UI work that deserves its own focused effort and its own testing, not something to
+  bolt onto an already-large Real-Time day. Instead, typing <code>@</code> immediately followed by a
+  project member's EXACT email (e.g. <code>@hamza@example.com</code>) is all
+  <code>detectMentions</code> in <code>task.service.ts</code> looks for. It's less convenient, but
+  completely unambiguous, fully server-verified against real project members, and the highlighting
+  you see in the comment afterward proves it worked. A real autocomplete picker is a reasonable
+  follow-up UI improvement on top of this same backend - the hard part (detecting and storing real
+  mentions) is already done.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>No notifications drawer, no "you were mentioned" badge anywhere in the UI - the SRS explicitly
+  reserves a notifications drawer for Day 17 polish. Today's mentions are visible (highlighted in
+  the comment itself) but don't push a separate alert anywhere yet.</li>
+  <li>No comment replies/threading - a nested comment tree is a bigger feature than fits alongside
+  everything else today, and nothing so far has specifically promised it for this day.</li>
+  <li>Live updates only cover tasks and comments - attachments and time entries still just refresh
+  the normal way (re-open the panel, or wait for your next own action to invalidate the cache).
+  Extending the same room-broadcast pattern to those would be a small, mechanical follow-up.</li>
+  <li>The frontend reconnects a dropped socket automatically (Socket.IO's default behavior), but
+  there's no "you're offline, reconnecting…" banner beyond the small Live/Offline badge - deeper
+  connection-state UX is a reasonable future polish item, not built today.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> - three new packages today (<code>socket.io</code> and
+  <code>cookie</code> on the backend, <code>socket.io-client</code> on the frontend).</li>
+  <li>Run <code>pnpm dev</code>, log in, open a project's board - you should see a teal "Live" badge
+  next to the project name within a second or two.</li>
+  <li>Open the SAME board in a second browser (or an incognito window, logged in as a different
+  member of the same organization).</li>
+  <li>Drag a card in one window - watch it move in the other, with no refresh.</li>
+  <li>Open a task, post a comment mentioning a real project member's email
+  (<code>@their-email@example.com</code>) - confirm it highlights, then edit and delete your own
+  comment.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every package (shared-types, validation, api, web) compiles with no TypeScript errors - all four passed clean on the FIRST attempt this time, no fix-up round needed (checked in a fresh sandbox copy)</td><td>✅ Confirmed</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) completes with no errors - 1,692 modules bundled successfully</td><td>✅ Confirmed</td></tr>
+  <tr><td>All 19 task-module REST routes (including the two brand-new comment edit/delete routes) still correctly reject requests with no login cookie - a full regression pass, not just the new routes</td><td>✅ Confirmed (401, tested without a database)</td></tr>
+  <tr><td>The socket connection itself rejects a handshake with no auth cookie, and rejects one with a garbage/tampered token - both without ever touching a database</td><td>✅ Confirmed</td></tr>
+  <tr><td>The socket connection ACCEPTS a genuinely valid, correctly-signed access token</td><td>✅ Confirmed</td></tr>
+  <tr><td>The <code>join-project</code> handler's real membership check (does this specific user actually belong to this specific organization before their socket can join the room) - this is a DATABASE-backed check with no HTTP-style "reject before touching the DB" shortcut available</td><td>⏳ Needs you to test it locally - traced by hand, not run against a live database</td></tr>
+  <tr><td>The full live loop - drag a card in one browser, see it move in another; post/edit/delete a mentioned comment and see it highlight</td><td>⏳ Needs you to test it locally (see steps above)</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Days 10-15 cover several unscheduled-but-confirmed features referenced in the codebase since
+earlier days - most notably a support-tickets module (the <code>ticket.assign</code> permission has
+been reserved since Day 5), task dependencies/checklists/a risk register, and real file uploads to
+replace Day 8's link-only attachments. The exact day-by-day order for these isn't confirmed (the
+original schedule PDF wasn't available when this was written) - see
+<code>docs/PROJECT_HANDOFF.md</code> for the full reconstruction and its confidence levels.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 09 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

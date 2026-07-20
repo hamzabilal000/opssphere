@@ -358,7 +358,16 @@ export interface TaskCommentSummary {
   authorId: string;
   authorEmail: string;
   body: string;
+  // DAY 9: who got @mentioned in this comment (see task-comment.model.ts
+  // for exactly how a mention is detected) - same parallel-arrays idea as
+  // TaskSummary's assigneeIds/assigneeEmails above, resolved server-side.
+  mentionedUserIds: string[];
+  mentionedEmails: string[];
   createdAt: string;
+  updatedAt: string;
+  // true whenever updatedAt is later than createdAt - computed server-side
+  // once, so the frontend never has to compare two date strings itself.
+  isEdited: boolean;
 }
 
 /** DAY 8 keeps this to a LINK, not a real uploaded file - see the Day 8
@@ -382,4 +391,46 @@ export interface TimeEntrySummary {
   note: string;
   workDate: string;
   createdAt: string;
+}
+
+// ============================================================================
+// DAY 9 — REAL-TIME TYPES
+// ----------------------------------------------------------------------------
+// Comment edit/delete and @mentions are new MODEL fields (see
+// TaskCommentSummary above). This section is the other half of Day 9: the
+// live-update layer itself. `SOCKET_EVENTS` is the same idea as
+// `PERMISSIONS` above - one canonical list of event NAME strings, so the
+// backend (which emits them, see lib/socket.ts + task.controller.ts) and
+// the frontend (which listens for them, see web/src/lib/socket.ts) can
+// never quietly drift apart on what an event is actually called.
+// ============================================================================
+
+export const SOCKET_EVENTS = {
+  TASK_CREATED: "task:created",
+  TASK_UPDATED: "task:updated",
+  TASK_MOVED: "task:moved",
+  TASK_DELETED: "task:deleted",
+  COMMENT_CREATED: "comment:created",
+  COMMENT_UPDATED: "comment:updated",
+  COMMENT_DELETED: "comment:deleted",
+} as const;
+
+export type SocketEventName = (typeof SOCKET_EVENTS)[keyof typeof SOCKET_EVENTS];
+
+// The payload shapes broadcast alongside each event above. Deliberately
+// small and specific rather than one big "anything could be in here" blob -
+// a listener for TASK_DELETED only ever needs a taskId, not a whole task.
+export interface TaskChangedPayload {
+  task: TaskSummary;
+}
+export interface TaskDeletedPayload {
+  taskId: string;
+}
+export interface CommentChangedPayload {
+  taskId: string;
+  comment: TaskCommentSummary;
+}
+export interface CommentDeletedPayload {
+  taskId: string;
+  commentId: string;
 }

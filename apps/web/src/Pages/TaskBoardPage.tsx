@@ -14,8 +14,9 @@
 
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Plus, ListTree } from "lucide-react";
-import type { TaskStatus, TaskSummary } from "@opssphere/shared-types";
+import { useQueryClient } from "@tanstack/react-query";
+import { Plus, ListTree, Radio } from "lucide-react";
+import { SOCKET_EVENTS, type TaskStatus, type TaskSummary } from "@opssphere/shared-types";
 import {
   useOrganizationQuery,
   useProjectQuery,
@@ -26,6 +27,7 @@ import {
   useSprintsQuery,
   useCreateSprintMutation,
 } from "../lib/queries";
+import { useProjectSocket } from "../lib/socket";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -52,6 +54,25 @@ export default function TaskBoardPage() {
   const createTaskMutation = useCreateTaskMutation(organizationId, projectId);
   const moveTaskMutation = useMoveTaskMutation(organizationId, projectId);
   const createSprintMutation = useCreateSprintMutation(organizationId, projectId);
+  const queryClient = useQueryClient();
+
+  // DAY 9: live updates. Every handler here just invalidates the relevant
+  // TanStack Query cache key - the exact same key useTasksQuery/
+  // useTaskCommentsQuery already use - so the actual re-fetch-and-re-render
+  // logic is 100% reused from Day 6-8, not reinvented. See lib/socket.ts.
+  const tasksQueryKey = ["organizations", organizationId, "projects", projectId, "tasks"];
+  const { connected: liveConnected } = useProjectSocket(organizationId, projectId, {
+    [SOCKET_EVENTS.TASK_CREATED]: () => queryClient.invalidateQueries({ queryKey: tasksQueryKey }),
+    [SOCKET_EVENTS.TASK_UPDATED]: () => queryClient.invalidateQueries({ queryKey: tasksQueryKey }),
+    [SOCKET_EVENTS.TASK_MOVED]: () => queryClient.invalidateQueries({ queryKey: tasksQueryKey }),
+    [SOCKET_EVENTS.TASK_DELETED]: () => queryClient.invalidateQueries({ queryKey: tasksQueryKey }),
+    [SOCKET_EVENTS.COMMENT_CREATED]: (payload) =>
+      queryClient.invalidateQueries({ queryKey: [...tasksQueryKey, payload.taskId, "comments"] }),
+    [SOCKET_EVENTS.COMMENT_UPDATED]: (payload) =>
+      queryClient.invalidateQueries({ queryKey: [...tasksQueryKey, payload.taskId, "comments"] }),
+    [SOCKET_EVENTS.COMMENT_DELETED]: (payload) =>
+      queryClient.invalidateQueries({ queryKey: [...tasksQueryKey, payload.taskId, "comments"] }),
+  });
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [sprintFilter, setSprintFilter] = useState<string>("all");
@@ -130,7 +151,20 @@ export default function TaskBoardPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{project?.name ?? "Board"}</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-slate-900">{project?.name ?? "Board"}</h1>
+            {/* DAY 9: a quiet signal that live updates are actually
+                connected - not required to use the board, just honest
+                feedback instead of a silent socket that might have failed. */}
+            <span
+              className={`flex items-center gap-1 text-xs rounded-full px-2 py-0.5 ${
+                liveConnected ? "bg-teal-50 text-brand-teal" : "bg-slate-100 text-slate-400"
+              }`}
+              title={liveConnected ? "Live updates connected" : "Live updates not connected"}
+            >
+              <Radio className="w-3 h-3" /> {liveConnected ? "Live" : "Offline"}
+            </span>
+          </div>
           <p className="text-slate-500 text-sm">Drag a card between columns to change its status.</p>
         </div>
 

@@ -302,6 +302,15 @@ export const createTaskCommentSchema = z.object({
 });
 export type CreateTaskCommentInput = z.infer<typeof createTaskCommentSchema>;
 
+// DAY 9: editing reuses the exact same shape as creating - a comment is
+// just one field, `body` - so there's no reason for a second, differently-
+// shaped schema here (contrast with tasks, where updateTaskSchema is
+// meaningfully bigger than createTaskSchema).
+export const updateTaskCommentSchema = z.object({
+  body: z.string().min(1, "Comment can't be empty").max(4000, "Comment is too long"),
+});
+export type UpdateTaskCommentInput = z.infer<typeof updateTaskCommentSchema>;
+
 export const createTaskAttachmentSchema = z.object({
   name: z.string().min(1, "Name is required").max(200, "Name is too long"),
   url: z.string().url("Enter a valid URL"),

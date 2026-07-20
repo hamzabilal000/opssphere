@@ -8,15 +8,17 @@
 // acceptance test describes, all in one place instead of separate pages.
 // ============================================================================
 
-import { useState } from "react";
-import { X, Trash2, Plus, Clock, Paperclip, MessageSquare, ListTree } from "lucide-react";
-import type { ProjectMemberSummary, SprintSummary, TaskSummary } from "@opssphere/shared-types";
+import { useState, type ReactNode } from "react";
+import { X, Trash2, Plus, Clock, Paperclip, MessageSquare, ListTree, Pencil, Check } from "lucide-react";
+import type { ProjectMemberSummary, SprintSummary, TaskCommentSummary, TaskSummary } from "@opssphere/shared-types";
 import {
   useUpdateTaskMutation,
   useDeleteTaskMutation,
   useCreateTaskMutation,
   useTaskCommentsQuery,
   useCreateTaskCommentMutation,
+  useUpdateTaskCommentMutation,
+  useDeleteTaskCommentMutation,
   useTaskAttachmentsQuery,
   useCreateTaskAttachmentMutation,
   useDeleteTaskAttachmentMutation,
@@ -29,6 +31,33 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { LoadingState, EmptyState } from "../ui/States";
 import { useToast } from "../ui/Toast";
+
+// DAY 9: turns "hey @hamza@example.com can you look?" into text with the
+// recognized mention visually highlighted. Deliberately simple - it only
+// highlights emails the BACKEND already confirmed as real mentions
+// (mentionedEmails, resolved server-side in task.service.ts's
+// detectMentions), never trying to guess/parse anything client-side itself.
+function renderCommentBody(body: string, mentionedEmails: string[]): ReactNode {
+  if (mentionedEmails.length === 0) return body;
+
+  const escaped = mentionedEmails.map((email) => email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const pattern = new RegExp(`@(${escaped.join("|")})`, "gi");
+  // TYPESCRIPT NOTE: a capturing group inside .split(...) keeps the
+  // matched pieces IN the result array, alternating [text, match, text,
+  // match, ...] - that's what lets us tell "was this piece a mention or
+  // just regular text" purely from its position (odd index = a match).
+  const parts = body.split(pattern);
+
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="text-brand-dark font-medium bg-teal-50 rounded px-1">
+        @{part}
+      </span>
+    ) : (
+      part
+    )
+  );
+}
 
 interface TaskDetailModalProps {
   organizationId: string;
@@ -67,6 +96,8 @@ export function TaskDetailModal({
 
   const commentsQuery = useTaskCommentsQuery(organizationId, projectId, task.id);
   const createCommentMutation = useCreateTaskCommentMutation(organizationId, projectId, task.id);
+  const updateCommentMutation = useUpdateTaskCommentMutation(organizationId, projectId, task.id);
+  const deleteCommentMutation = useDeleteTaskCommentMutation(organizationId, projectId, task.id);
 
   const attachmentsQuery = useTaskAttachmentsQuery(organizationId, projectId, task.id);
   const createAttachmentMutation = useCreateTaskAttachmentMutation(organizationId, projectId, task.id);
@@ -79,6 +110,8 @@ export function TaskDetailModal({
   const [description, setDescription] = useState(task.description);
   const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
   const [newComment, setNewComment] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingBody, setEditingBody] = useState("");
   const [newAttachmentName, setNewAttachmentName] = useState("");
   const [newAttachmentUrl, setNewAttachmentUrl] = useState("");
   const [newEntryMinutes, setNewEntryMinutes] = useState("");
@@ -158,6 +191,29 @@ export function TaskDetailModal({
     try {
       await createCommentMutation.mutateAsync({ body: newComment });
       setNewComment("");
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
+  }
+
+  function startEditComment(comment: TaskCommentSummary) {
+    setEditingCommentId(comment.id);
+    setEditingBody(comment.body);
+  }
+
+  async function handleSaveCommentEdit(commentId: string) {
+    try {
+      await updateCommentMutation.mutateAsync({ commentId, input: { body: editingBody } });
+      setEditingCommentId(null);
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
+  }
+
+  async function handleDeleteComment(commentId: string) {
+    try {
+      await deleteCommentMutation.mutateAsync(commentId);
+      toast("Comment deleted.");
     } catch (err) {
       toast((err as Error).message, "error");
     }
@@ -317,21 +373,69 @@ export function TaskDetailModal({
             {commentsQuery.isLoading && <LoadingState />}
             {comments.length === 0 && !commentsQuery.isLoading && <EmptyState label="No comments yet." />}
             <ul className="space-y-2 mb-2">
-              {comments.map((c) => (
-                <li key={c.id} className="text-sm bg-slate-50 rounded-md p-2">
-                  <p className="text-slate-700">{c.body}</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    {c.authorEmail} — {new Date(c.createdAt).toLocaleString()}
-                  </p>
-                </li>
-              ))}
+              {comments.map((c) => {
+                const canEditThis = c.authorId === currentUserId || canManage;
+                const isEditing = editingCommentId === c.id;
+                return (
+                  <li key={c.id} className="text-sm bg-slate-50 rounded-md p-2">
+                    {isEditing ? (
+                      <div className="flex gap-2">
+                        <Input
+                          autoFocus
+                          value={editingBody}
+                          onChange={(e) => setEditingBody(e.target.value)}
+                          className="flex-1"
+                        />
+                        <Button
+                          type="button"
+                          onClick={() => handleSaveCommentEdit(c.id)}
+                          disabled={updateCommentMutation.isPending}
+                        >
+                          <Check className="w-4 h-4" />
+                        </Button>
+                        <Button type="button" variant="ghost" onClick={() => setEditingCommentId(null)}>
+                          Cancel
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-slate-700">{renderCommentBody(c.body, c.mentionedEmails)}</p>
+                          {canEditThis && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => startEditComment(c)}
+                                className="text-slate-400 hover:text-slate-600"
+                                aria-label="Edit comment"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteComment(c.id)}
+                                className="text-red-600"
+                                aria-label="Delete comment"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-1">
+                          {c.authorEmail} — {new Date(c.createdAt).toLocaleString()}
+                          {c.isEdited && " (edited)"}
+                        </p>
+                      </>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
             <form onSubmit={handleAddComment} className="flex gap-2">
               <Input
                 required
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Write a comment…"
+                placeholder="Write a comment… (@email@example.com to mention someone)"
                 className="flex-1"
               />
               <Button type="submit" disabled={createCommentMutation.isPending}>

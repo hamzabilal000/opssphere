@@ -12,10 +12,12 @@
 // healthy while every request would actually fail.
 // ============================================================================
 
+import { createServer } from "node:http";
 import { env } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { connectDatabase } from "./lib/db.js";
 import { createApp } from "./app.js";
+import { initSocketServer } from "./lib/socket.js";
 
 // TYPESCRIPT NOTE: `async function main() { ... }`
 // Nothing TypeScript-specific here — this is exactly the async/await
@@ -29,11 +31,20 @@ async function main() {
   // Step 2: build the Express app (see app.ts) — routes, middleware, etc.
   const app = createApp();
 
-  // Step 3: start listening for real HTTP requests. Same job as
-  // `app.listen(8080, () => console.log("Running"))` in your other
-  // projects — `env.PORT` just means "whatever port is set in .env
-  // (defaults to 4000 if not set)."
-  const server = app.listen(env.PORT, () => {
+  // Step 3: DAY 9 CHANGE — instead of `app.listen(...)` directly, we build
+  // the plain Node http.Server ourselves first. Express's `.listen()` was
+  // secretly doing exactly this the whole time (Express apps ARE just a
+  // request handler function under the hood) - we just need our own
+  // reference to that raw server object so Socket.IO can attach itself to
+  // the SAME server and share the SAME port (see lib/socket.ts). Two
+  // separate servers on two separate ports would work too, but sharing one
+  // port means the frontend only ever talks to http://localhost:4000,
+  // whether it's a normal fetch() call or a live socket connection.
+  const httpServer = createServer(app);
+  initSocketServer(httpServer);
+
+  // Step 4: start listening for real HTTP (and now WebSocket) requests.
+  const server = httpServer.listen(env.PORT, () => {
     logger.info(`OpsSphere API listening on http://localhost:${env.PORT}`);
   });
 

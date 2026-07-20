@@ -16,9 +16,10 @@
 //     reasonable future improvement - not built today, see the note.)
 //   - Comments, attachments, and time entries: NO permission gate on
 //     create - any active member can do these low-risk, collaborative
-//     actions. DELETING one of these is checked inside the controller/
-//     service instead of here, because the rule isn't a flat permission -
-//     it's "the person who created it, OR someone with task.manage."
+//     actions. EDITING/DELETING one of these is checked inside the
+//     controller/service instead of here, because the rule isn't a flat
+//     permission - it's "the person who created it, OR someone with
+//     task.manage" (Day 9 adds comment editing to this same rule).
 // ============================================================================
 
 import { Router } from "express";
@@ -34,6 +35,8 @@ import {
   deleteTaskHandler,
   listCommentsHandler,
   createCommentHandler,
+  updateCommentHandler,
+  deleteCommentHandler,
   listAttachmentsHandler,
   createAttachmentHandler,
   deleteAttachmentHandler,
@@ -104,9 +107,22 @@ taskRouter.delete(
   deleteTaskHandler
 );
 
-// ---- Comments (no permission gate - any active member) -------------------
+// ---- Comments (create: any member; edit/delete: ownership-or-permission,
+// checked inside the controller/service, not here - see Day 9 note) --------
 taskRouter.get(`${base}/tasks/:taskId/comments`, requireAuth, requireOrgMembership, listCommentsHandler);
 taskRouter.post(`${base}/tasks/:taskId/comments`, requireAuth, requireOrgMembership, createCommentHandler);
+taskRouter.patch(
+  `${base}/tasks/:taskId/comments/:commentId`,
+  requireAuth,
+  requireOrgMembership,
+  updateCommentHandler
+);
+taskRouter.delete(
+  `${base}/tasks/:taskId/comments/:commentId`,
+  requireAuth,
+  requireOrgMembership,
+  deleteCommentHandler
+);
 
 // ---- Attachments (create: any member; delete: ownership-or-permission,
 // checked inside the controller/service, not here) -------------------------

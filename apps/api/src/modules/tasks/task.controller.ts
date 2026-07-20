@@ -13,10 +13,11 @@ import {
   updateTaskSchema,
   moveTaskSchema,
   createTaskCommentSchema,
+  updateTaskCommentSchema,
   createTaskAttachmentSchema,
   createTimeEntrySchema,
 } from "@opssphere/validation";
-import { PERMISSIONS } from "@opssphere/shared-types";
+import { PERMISSIONS, SOCKET_EVENTS } from "@opssphere/shared-types";
 import type {
   ApiSuccessResponse,
   SprintSummary,
@@ -27,6 +28,7 @@ import type {
 } from "@opssphere/shared-types";
 import * as taskService from "./task.service.js";
 import { ApiError } from "../../middleware/errorHandler.js";
+import { emitToProject } from "../../lib/socket.js";
 
 function fieldErrorsFrom(error: { flatten: () => { fieldErrors: Record<string, string[] | undefined> } }) {
   return Object.entries(error.flatten().fieldErrors).map(([field, messages]) => ({
@@ -131,6 +133,12 @@ export async function createTaskHandler(req: Request, res: Response) {
     parsed.data
   );
 
+  // DAY 9: tell everyone else currently looking at this project's board -
+  // see lib/socket.ts. Emitting AFTER the database write succeeds (not
+  // before) means a socket broadcast can never announce something that
+  // didn't actually happen.
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.TASK_CREATED, { task });
+
   const body: ApiSuccessResponse<{ task: TaskSummary }> = {
     success: true,
     message: "Task created.",
@@ -152,6 +160,8 @@ export async function updateTaskHandler(req: Request, res: Response) {
     String(req.params.taskId ?? ""),
     parsed.data
   );
+
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.TASK_UPDATED, { task });
 
   const body: ApiSuccessResponse<{ task: TaskSummary }> = {
     success: true,
@@ -176,6 +186,11 @@ export async function moveTaskHandler(req: Request, res: Response) {
     parsed.data.status
   );
 
+  // This is the headline Day 9 moment: someone drags a card, and every
+  // OTHER browser looking at this same board sees it move too, with no
+  // refresh - see web/src/lib/socket.ts's listener for TASK_MOVED.
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.TASK_MOVED, { task });
+
   const body: ApiSuccessResponse<{ task: TaskSummary }> = {
     success: true,
     message: "Task moved.",
@@ -191,6 +206,11 @@ export async function deleteTaskHandler(req: Request, res: Response) {
     String(req.params.projectId ?? ""),
     String(req.params.taskId ?? "")
   );
+
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.TASK_DELETED, {
+    taskId: String(req.params.taskId ?? ""),
+  });
+
   const body: ApiSuccessResponse<null> = { success: true, message: "Task deleted.", data: null };
   res.status(200).json(body);
 }
@@ -225,12 +245,67 @@ export async function createCommentHandler(req: Request, res: Response) {
     parsed.data
   );
 
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.COMMENT_CREATED, {
+    taskId: String(req.params.taskId ?? ""),
+    comment,
+  });
+
   const body: ApiSuccessResponse<{ comment: TaskCommentSummary }> = {
     success: true,
     message: "Comment added.",
     data: { comment },
   };
   res.status(201).json(body);
+}
+
+// PATCH /api/v1/organizations/:organizationId/projects/:projectId/tasks/:taskId/comments/:commentId
+export async function updateCommentHandler(req: Request, res: Response) {
+  const parsed = updateTaskCommentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, "VALIDATION_ERROR", "Validation failed", fieldErrorsFrom(parsed.error));
+  }
+
+  const comment = await taskService.updateComment(
+    req.organizationId ?? "",
+    String(req.params.projectId ?? ""),
+    String(req.params.taskId ?? ""),
+    String(req.params.commentId ?? ""),
+    req.userId ?? "",
+    canManageTasks(req),
+    parsed.data
+  );
+
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.COMMENT_UPDATED, {
+    taskId: String(req.params.taskId ?? ""),
+    comment,
+  });
+
+  const body: ApiSuccessResponse<{ comment: TaskCommentSummary }> = {
+    success: true,
+    message: "Comment updated.",
+    data: { comment },
+  };
+  res.status(200).json(body);
+}
+
+// DELETE /api/v1/organizations/:organizationId/projects/:projectId/tasks/:taskId/comments/:commentId
+export async function deleteCommentHandler(req: Request, res: Response) {
+  await taskService.deleteComment(
+    req.organizationId ?? "",
+    String(req.params.projectId ?? ""),
+    String(req.params.taskId ?? ""),
+    String(req.params.commentId ?? ""),
+    req.userId ?? "",
+    canManageTasks(req)
+  );
+
+  emitToProject(String(req.params.projectId ?? ""), SOCKET_EVENTS.COMMENT_DELETED, {
+    taskId: String(req.params.taskId ?? ""),
+    commentId: String(req.params.commentId ?? ""),
+  });
+
+  const body: ApiSuccessResponse<null> = { success: true, message: "Comment deleted.", data: null };
+  res.status(200).json(body);
 }
 
 // ----------------------------------------------------------------------------

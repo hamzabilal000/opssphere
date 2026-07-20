@@ -14,6 +14,15 @@ export default defineConfig({
         target: "http://localhost:4000",
         changeOrigin: true,
       },
+      // DAY 9: Socket.IO's default path. `ws: true` is the one thing the
+      // plain "/api" proxy above doesn't need - it tells Vite's dev proxy
+      // to also forward the WebSocket UPGRADE handshake, not just normal
+      // HTTP requests. Without it, the socket connection would silently
+      // fail to ever actually open in dev.
+      "/socket.io": {
+        target: "http://localhost:4000",
+        ws: true,
+      },
     },
   },
 });

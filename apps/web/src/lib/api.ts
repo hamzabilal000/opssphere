@@ -40,6 +40,7 @@ import type {
   CreateTaskInput,
   UpdateTaskInput,
   CreateTaskCommentInput,
+  UpdateTaskCommentInput,
   CreateTaskAttachmentInput,
   CreateTimeEntryInput,
 } from "@opssphere/validation";
@@ -450,6 +451,30 @@ export function createTaskComment(
   input: CreateTaskCommentInput
 ): Promise<{ comment: TaskCommentSummary }> {
   return apiRequest(`${taskPath(organizationId, projectId, taskId)}/comments`, { method: "POST", body: input });
+}
+
+export function updateTaskComment(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  commentId: string,
+  input: UpdateTaskCommentInput
+): Promise<{ comment: TaskCommentSummary }> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/comments/${encodeURIComponent(commentId)}`, {
+    method: "PATCH",
+    body: input,
+  });
+}
+
+export function deleteTaskComment(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  commentId: string
+): Promise<null> {
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/comments/${encodeURIComponent(commentId)}`, {
+    method: "DELETE",
+  });
 }
 
 // ---- Attachments (link-based, see task-attachment.model.ts) --------------

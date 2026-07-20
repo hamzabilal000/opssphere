@@ -41,6 +41,7 @@ import type {
   CreateTaskInput,
   UpdateTaskInput,
   CreateTaskCommentInput,
+  UpdateTaskCommentInput,
   CreateTaskAttachmentInput,
   CreateTimeEntryInput,
 } from "@opssphere/validation";
@@ -449,6 +450,34 @@ export function useCreateTaskCommentMutation(organizationId: string, projectId: 
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateTaskCommentInput) => api.createTaskComment(organizationId, projectId, taskId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "comments"],
+      }),
+  });
+}
+
+// DAY 9: edit/delete a comment - same invalidation target as creating one.
+// Live updates from OTHER browsers arrive via the socket listener in
+// TaskBoardPage/TaskDetailModal instead of a query invalidation, but the
+// browser that actually MADE the change still uses this normal mutation
+// flow, exactly like every other day's mutations.
+export function useUpdateTaskCommentMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ commentId, input }: { commentId: string; input: UpdateTaskCommentInput }) =>
+      api.updateTaskComment(organizationId, projectId, taskId, commentId, input),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "comments"],
+      }),
+  });
+}
+
+export function useDeleteTaskCommentMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (commentId: string) => api.deleteTaskComment(organizationId, projectId, taskId, commentId),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "comments"],

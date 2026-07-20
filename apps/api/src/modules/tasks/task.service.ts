@@ -8,6 +8,7 @@
 
 import { Types } from "mongoose";
 import { Project } from "../projects/project.model.js";
+import { ProjectMember } from "../projects/project-member.model.js";
 import { Membership } from "../organizations/membership.model.js";
 import { User } from "../auth/user.model.js";
 import { Sprint } from "./sprint.model.js";
@@ -22,6 +23,7 @@ import type {
   CreateTaskInput,
   UpdateTaskInput,
   CreateTaskCommentInput,
+  UpdateTaskCommentInput,
   CreateTaskAttachmentInput,
   CreateTimeEntryInput,
 } from "@opssphere/validation";
@@ -325,17 +327,45 @@ export async function deleteTask(organizationId: string, projectId: string, task
 // ----------------------------------------------------------------------------
 // COMMENTS
 // ----------------------------------------------------------------------------
-export async function listComments(
-  organizationId: string,
-  projectId: string,
-  taskId: string
-): Promise<TaskCommentSummary[]> {
-  await findTaskOrThrow(organizationId, projectId, taskId);
-  const comments = await TaskComment.find({ taskId }).sort({ createdAt: 1 });
-  if (comments.length === 0) return [];
+// DAY 9: "@" immediately followed by a project member's exact email (e.g.
+// "@hamza@example.com") counts as a mention. See task-comment.model.ts's
+// top comment for why a full "@" autocomplete picker isn't what Day 9
+// builds - this is the deliberately simple, unambiguous version of it.
+const MENTION_TOKEN_PATTERN = /@([^\s]+@[^\s]+)/g;
 
-  const authorIds = comments.map((c) => c.authorId);
-  const users = await User.find({ _id: { $in: authorIds } });
+async function detectMentions(organizationId: string, projectId: string, body: string): Promise<Types.ObjectId[]> {
+  const candidateEmails = new Set(
+    Array.from(body.matchAll(MENTION_TOKEN_PATTERN)).map((match) => (match[1] ?? "").toLowerCase())
+  );
+  if (candidateEmails.size === 0) return [];
+
+  // Only project members can be mentioned - same tenant boundary as
+  // assigning a task (assertAssigneesAreOrgMembers above), one level
+  // narrower (project, not just organization).
+  const members = await ProjectMember.find({ organizationId, projectId });
+  if (members.length === 0) return [];
+
+  const users = await User.find({ _id: { $in: members.map((m) => m.userId) } });
+  const userIdByEmail = new Map(users.map((u) => [u.email.toLowerCase(), u._id]));
+
+  const mentioned: Types.ObjectId[] = [];
+  for (const email of candidateEmails) {
+    const userId = userIdByEmail.get(email);
+    if (userId) mentioned.push(userId);
+  }
+  return mentioned;
+}
+
+// Turns a batch of TaskComment documents into TaskCommentSummary[],
+// resolving both authors AND mentioned users in a couple of batched
+// queries instead of one per comment - same principle as toTaskSummaries.
+async function toCommentSummaries(comments: InstanceType<typeof TaskComment>[]): Promise<TaskCommentSummary[]> {
+  const allUserIds = new Set<string>();
+  for (const c of comments) {
+    allUserIds.add(c.authorId.toString());
+    for (const id of c.mentionedUserIds) allUserIds.add(id.toString());
+  }
+  const users = allUserIds.size > 0 ? await User.find({ _id: { $in: Array.from(allUserIds) } }) : [];
   const emailByUserId = new Map(users.map((u) => [u._id.toString(), u.email]));
 
   return comments.map((c) => ({
@@ -343,8 +373,22 @@ export async function listComments(
     authorId: c.authorId.toString(),
     authorEmail: emailByUserId.get(c.authorId.toString()) ?? "unknown",
     body: c.body,
+    mentionedUserIds: c.mentionedUserIds.map((id) => id.toString()),
+    mentionedEmails: c.mentionedUserIds.map((id) => emailByUserId.get(id.toString()) ?? "unknown"),
     createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
+    isEdited: c.updatedAt.getTime() > c.createdAt.getTime(),
   }));
+}
+
+export async function listComments(
+  organizationId: string,
+  projectId: string,
+  taskId: string
+): Promise<TaskCommentSummary[]> {
+  await findTaskOrThrow(organizationId, projectId, taskId);
+  const comments = await TaskComment.find({ taskId }).sort({ createdAt: 1 });
+  return toCommentSummaries(comments);
 }
 
 export async function createComment(
@@ -355,17 +399,66 @@ export async function createComment(
   input: CreateTaskCommentInput
 ): Promise<TaskCommentSummary> {
   await findTaskOrThrow(organizationId, projectId, taskId);
+  const mentionedUserIds = await detectMentions(organizationId, projectId, input.body);
 
-  const comment = await TaskComment.create({ organizationId, taskId, authorId, body: input.body });
-  const author = await User.findById(authorId);
+  const comment = await TaskComment.create({ organizationId, taskId, authorId, body: input.body, mentionedUserIds });
 
-  return {
-    id: comment._id.toString(),
-    authorId: comment.authorId.toString(),
-    authorEmail: author?.email ?? "unknown",
-    body: comment.body,
-    createdAt: comment.createdAt.toISOString(),
-  };
+  const [summary] = await toCommentSummaries([comment]);
+  return summary as TaskCommentSummary;
+}
+
+// `canManageTasks` is the caller's task.manage permission (resolved by the
+// controller) - editing/deleting someone else's comment needs it, editing/
+// deleting your OWN comment never does. Same ownership-or-permission shape
+// as Day 8's attachment/time-entry deletes.
+export async function updateComment(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  commentId: string,
+  actingUserId: string,
+  canManageTasks: boolean,
+  input: UpdateTaskCommentInput
+): Promise<TaskCommentSummary> {
+  await findTaskOrThrow(organizationId, projectId, taskId);
+  const comment = await TaskComment.findOne({ _id: commentId, taskId });
+  if (!comment) {
+    throw new ApiError(404, "RESOURCE_NOT_FOUND", "Comment not found.");
+  }
+
+  const isAuthor = comment.authorId.toString() === actingUserId;
+  if (!isAuthor && !canManageTasks) {
+    throw new ApiError(403, "FORBIDDEN", "Only the comment's author or a task manager can edit it.");
+  }
+
+  comment.body = input.body;
+  comment.mentionedUserIds = await detectMentions(organizationId, projectId, input.body);
+  await comment.save();
+
+  const [summary] = await toCommentSummaries([comment]);
+  return summary as TaskCommentSummary;
+}
+
+export async function deleteComment(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  commentId: string,
+  actingUserId: string,
+  canManageTasks: boolean
+): Promise<void> {
+  await findTaskOrThrow(organizationId, projectId, taskId);
+  const comment = await TaskComment.findOne({ _id: commentId, taskId });
+  if (!comment) {
+    throw new ApiError(404, "RESOURCE_NOT_FOUND", "Comment not found.");
+  }
+
+  const isAuthor = comment.authorId.toString() === actingUserId;
+  if (!isAuthor && !canManageTasks) {
+    throw new ApiError(403, "FORBIDDEN", "Only the comment's author or a task manager can delete it.");
+  }
+
+  await comment.deleteOne();
 }
 
 // ----------------------------------------------------------------------------
