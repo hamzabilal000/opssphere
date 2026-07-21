@@ -37,27 +37,29 @@ that reconstruction as a best-effort placeholder, not a confirmed spec, and say 
   validation, `bcryptjs` for password hashing, `jsonwebtoken` for JWTs, `nodemailer` (→ Mailpit
   locally) for email, `pino`/`pino-http` for logging, `helmet` + `cors` + `cookie-parser`,
   **`socket.io` + `cookie` (Day 9, real-time)**, **`@aws-sdk/client-s3` + `@aws-sdk/s3-request-
-  presigner` + `multer` (Day 12, real file storage — see lib/storage.ts)**.
+  presigner` + `multer` (Day 12, real file storage — see lib/storage.ts)**, **`express-rate-limit` +
+  `ioredis` + `rate-limit-redis` (Day 16, Valkey-backed rate limiting — see lib/rateLimiter.ts)**.
 - **Frontend**: React + Vite, React Router v6 (nested routes), TanStack Query (server state),
   Zustand (local UI state, persisted to localStorage), Tailwind CSS, `lucide-react` icons, hand-
   built shadcn/ui-style components (the real shadcn CLI can't run in this environment),
   **`socket.io-client` (Day 9)**.
 - **Infrastructure** (`docker-compose.yml`): MongoDB, Valkey/Redis, Mailpit (fake SMTP inbox, UI at
   `localhost:8025`), MinIO (S3-compatible object storage, console UI at `localhost:9001`, login
-  `opssphere`/`opssphere123`). **Valkey is STILL provisioned but UNUSED by any code** — Day 9 could
-  have used it for cross-instance Socket.IO pub/sub but didn't need to (a single server instance's
-  built-in in-memory adapter is enough for now; wiring up the Redis/Valkey adapter is a reasonable
-  upgrade if this ever runs on more than one server instance at once). **MinIO went from provisioned-
-  but-unused to actually wired up on Day 12** (see §6) — its five env vars (`MINIO_ENDPOINT`,
-  `MINIO_PORT`, `MINIO_BUCKET`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`) had existed in `.env`/
-  `.env.example` since Day 1 but were silently ignored by `config/env.ts`'s Zod schema until Day 12
-  actually added them to it — worth remembering if you ever wonder why an env var in `.env` doesn't
-  seem to be doing anything: check whether `env.ts`'s schema actually asks for it.
+  `opssphere`/`opssphere123`). **MinIO went from provisioned-but-unused to actually wired up on
+  Day 12** (see §6) — its five env vars (`MINIO_ENDPOINT`, `MINIO_PORT`, `MINIO_BUCKET`,
+  `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`) had existed in `.env`/`.env.example` since Day 1 but were
+  silently ignored by `config/env.ts`'s Zod schema until Day 12 actually added them to it. **Valkey
+  went from provisioned-but-unused to actually wired up on Day 16** — its own env var (`VALKEY_URL`)
+  had been sitting in `.env`/`.env.example` since Day 1 too, the exact same "silently ignored until
+  someone finally adds it to `env.ts`'s schema" gotcha, a THIRD time now. Every piece of infrastructure
+  in `docker-compose.yml` is now actually used by real code — worth remembering if you ever wonder why
+  an env var in `.env` doesn't seem to be doing anything: check whether `env.ts`'s schema actually
+  asks for it.
 - **Ports**: API `localhost:4000` (health check `/api/v1/health/live`), Web `localhost:5173`.
 
 ---
 
-## 3. Repository structure (as of Day 15)
+## 3. Repository structure (as of Day 16)
 
 ```
 OpsSphere/
@@ -67,14 +69,18 @@ OpsSphere/
 │   │       ├── config/env.ts        Zod-validated environment config, fails fast on boot
 │   │       ├── lib/                 db.ts, logger.ts, password.ts, mailer.ts,
 │   │       │                        socket.ts (Day 9 — Socket.IO server, auth, rooms),
-│   │       │                        storage.ts (Day 12 — MinIO client, signed URLs)
+│   │       │                        storage.ts (Day 12 — MinIO client, signed URLs),
+│   │       │                        rateLimiter.ts (Day 16 — Valkey client, fail-open store,
+│   │       │                        authRateLimiter)
 │   │       ├── middleware/errorHandler.ts   ApiError class, errorHandler, notFoundHandler
 │   │       ├── modules/
 │   │       │   ├── auth/            user, session, invitation models + auth service/controller/routes
 │   │       │   │                    (extended Day 15 — accepting an invitation now has TWO paths:
 │   │       │   │                    the original password-setting one for a brand new email, and
 │   │       │   │                    acceptInvitationAsExistingUser for an email that already has
-│   │       │   │                    an account, joining a second organization)
+│   │       │   │                    an account, joining a second organization; extended Day 16 —
+│   │       │   │                    authRateLimiter gates register/login/refresh/forgot-password/
+│   │       │   │                    reset-password/accept/accept-existing)
 │   │       │   ├── organizations/   organization, membership, role, department, team models +
 │   │       │   │                    tenant.middleware.ts (requireOrgMembership, requirePermission)
 │   │       │   ├── projects/        project, project-member, milestone models + service/controller/routes
@@ -98,11 +104,15 @@ OpsSphere/
 │       └── src/
 │           ├── components/
 │           │   ├── ui/               Button, Card, Input, States (Loading/Empty/Error), Toast
-│           │   ├── shell/            ProtectedRoute, AppShell, Sidebar, Topbar
+│           │   ├── shell/            ProtectedRoute, AppShell, Sidebar, Topbar, ErrorBoundary
+│           │   │                     (Day 16 — the one class component in the app, catches
+│           │   │                     render-time crashes)
 │           │   └── tasks/            TaskDetailModal (Day 8, extended Day 9 with comment edit/
 │           │                         delete + mention highlighting; extended Day 11 with
 │           │                         Dependencies + Checklist sections; extended Day 12 with a
-│           │                         real file-upload control alongside the link-attachment form)
+│           │                         real file-upload control alongside the link-attachment form;
+│           │                         extended Day 16 with Escape/backdrop-click-to-close + aria
+│           │                         labels)
 │           ├── Pages/                One file per route (RegisterPage, LoginPage, OverviewPage,
 │           │                         OrganizationDetailPage, ProjectsListPage, ProjectDetailPage,
 │           │                         TaskBoardPage, TicketsListPage, TicketDetailPage,
@@ -121,7 +131,7 @@ OpsSphere/
 │   ├── eslint-config/                Shared lint rules
 │   └── tsconfig/                     Shared base tsconfig
 ├── docs/
-│   ├── learning-notes/               01 through 15 (HTML, styled, one per completed day)
+│   ├── learning-notes/               01 through 16 (HTML, styled, one per completed day)
 │   └── PROJECT_HANDOFF.md            This file — keep it updated after every day (see §9)
 ├── docker-compose.yml               MongoDB, Valkey, Mailpit, MinIO
 └── README.md                        Currently STALE — still says "Day 1 of 18", update this
@@ -279,6 +289,37 @@ make the codebase feel inconsistent and will likely surprise whoever reads it ne
   (`requireAuth`), plus one extra check that the session's email matches the invitation's. These are
   different enough that keeping them as two small, single-purpose routes/service functions was
   chosen over one route branching on "was a password provided."
+
+**Hardening — fail-open safety layers, error boundaries, minimum a11y (Day 16 onward):**
+- **A safety/hardening LAYER (rate limiting, and anything like it added later) must fail OPEN, never
+  fail CLOSED and never crash the process.** If the thing backing it (Valkey, here) is unreachable,
+  the correct behavior is "stop limiting, let requests through" — never "block everyone" and never
+  "take the whole server down." `lib/rateLimiter.ts`'s `failOpenStore` wrapper is the reference
+  pattern: catch the underlying store's errors and report a synthetic "first hit" result instead of
+  re-throwing.
+- **A third-party library that fires unawaited promises in its constructor is a real unhandled-
+  rejection risk — attach a no-op `.catch()` immediately after construction if you don't otherwise
+  touch that promise.** This was found the hard way: `rate-limit-redis`'s `RedisStore` eagerly loads
+  two Lua scripts on construction, and with Valkey unreachable those rejected promises crashed the
+  whole Node process until `redisStore.incrementScriptSha.catch(() => undefined)` (and the same for
+  `getScriptSha`) were added right after creating it. Worth checking for in any future third-party
+  client library integrated into this codebase.
+- **Route a third-party middleware's own error format through this app's existing `ApiError`/
+  `errorHandler` pipeline instead of accepting its default response shape.** `authRateLimiter`'s
+  `handler` callback throws `ApiError(429, "RATE_LIMITED", ...)` rather than using
+  `express-rate-limit`'s built-in response — keeps every error in the API the same
+  `{ success, code, message }` shape regardless of which layer produced it.
+- **`ErrorBoundary` (the one class component in an otherwise all-function-components codebase) wraps
+  the ENTIRE app in `main.tsx`, outermost.** Function components genuinely cannot do this job
+  (`getDerivedStateFromError`/`componentDidCatch` have no hooks equivalent) — this is a deliberate,
+  narrow exception to the "hooks everywhere" style, not a drift back toward class components
+  generally. Remember its real limitation: it only catches RENDER-time crashes, not event-handler or
+  async errors (those are already covered by TanStack Query's `isError` states and each mutation's
+  `.catch()` + `useToast()`).
+- **Every icon-only button needs an `aria-label`; every modal needs an Escape (and ideally a
+  backdrop-click) way out.** These are the two concrete, checkable minimums for any future modal or
+  icon-only control added to this app — a full focus-trap and broader WCAG audit are further polish,
+  not required to close the basic gap.
 
 **Real-time (Day 9 onward):**
 - `apps/api/src/lib/socket.ts` holds the ONE Socket.IO server instance (module-level variable,
@@ -565,7 +606,7 @@ return" guard is gone. Verified with a standalone position-math simulation check
 array-splice as the reference answer across all 25 (oldIndex, targetIndex) pairs for a 5-card
 column, plus dedicated cross-column and fallback cases — all passed.
 
-### ✅ Day 15 — Multi-Organization Invitations (most recently completed)
+### ✅ Day 15 — Multi-Organization Invitations
 Day 5's `createOrgInvitation` used to reject outright the moment it saw an existing account for the
 invited email — a disclosed, deliberate limitation, not a bug. Today closes it by untangling two
 questions that Day 5 had tangled into one check: creation now only cares whether the invitee is
@@ -582,25 +623,34 @@ email exists by the time it's called, it now points the caller at the other rout
 to create a duplicate. No new permission, no new model — `Invitation`, `Membership`, and `Role` were
 all already exactly what this needed.
 
+### ✅ Day 16 — Hardening (most recently completed)
+A grab-bag day, the same shape Day 3 and Day 11 already took — several smaller, independent
+improvements rather than one feature. Rate limiting (`express-rate-limit`) now gates
+register/login/refresh/forgot-password/reset-password/accept-invitation, backed by Valkey
+(`ioredis` + `rate-limit-redis`) — closing a THIRD "provisioned but silently ignored" gap
+(`VALKEY_URL` had been sitting unread in `.env` since Day 1, same exact gotcha as Day 12's MinIO
+env vars). Building the fail-open degradation (see the new §4 convention block) surfaced and fixed
+a genuine bug: `rate-limit-redis`'s `RedisStore` fires two unawaited promises in its constructor
+that crashed the whole server with an unhandled rejection when Valkey was unreachable — fixed with
+two no-op `.catch()` calls. Frontend gained `ErrorBoundary` (the one class component in the app,
+wrapping everything in `main.tsx`, catching render-time crashes with a friendly fallback instead of
+a blank screen) and a small accessibility pass on `TaskDetailModal` (Escape-to-close,
+backdrop-click-to-close, `role="dialog"`, aria-labels on every previously-unlabeled icon-only
+button). Verified the fail-open path directly and completely in this sandbox (no real Valkey
+needed to prove "requests keep flowing and the server doesn't crash when Valkey is down") — a
+stronger verification story than most hardening work usually gets.
+
 ---
 
-### ⚠️ Days 16-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
+### ⚠️ Days 17-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
 
 The schedule and build-guide PDFs referenced by the README are **not present in this repo**. What
-follows for Days 16-18 is reconstructed **only** from forward-looking comments already written into
-the Day 1-15 code and learning notes.
+follows for Days 17-18 is reconstructed **only** from forward-looking comments already written into
+the Day 1-16 code and learning notes.
 
-**Still unordered before Day 16, but explicitly on the list somewhere:**
+**Still unordered, but explicitly on the list somewhere:**
 - **Permission model enhancements** — deny-rules or overrides on top of the flat allow-list (Day 5
   explicitly scoped these out, calling them a possible future addition, no day given).
-
-**Day 16 — "Hardening"** *(named explicitly once)*
-Accessibility and responsive-breakpoint polish beyond what Tailwind gives for free, per the Day 6
-learning note: *"real accessibility/responsive polish is a Day 16 'Hardening' task per the
-roadmap."* Likely also covers things typically bundled under "hardening" in a project like this —
-rate limiting (Valkey would be a natural fit here too), input sanitization review, security headers
-audit, error-boundary coverage — though only the accessibility/responsive piece is actually
-confirmed by a comment.
 
 **Day 17 — Polish** *(named explicitly once)*
 Per the Day 6 learning note: *"Command palette, keyboard shortcuts, and a notifications drawer are
@@ -674,10 +724,13 @@ loops).** Never claim more confidence than what was actually run.
 
 ## 8. Current state / how to resume
 
-- Git: as of Day 15, the working tree has the Day 15 changes (plus Days 12-14 and the post-Day-11
+- Git: as of Day 16, the working tree has the Day 16 changes (plus Days 12-15 and the post-Day-11
   role-permission-editing fix) staged but **not yet committed** (the user has not asked for an
   automatic push since Day 7 — check `git log` and `git status` first before assuming anything
-  about what's actually committed; don't assume Days 8-15 are pushed just because Day 7 was).
+  about what's actually committed; don't assume Days 8-16 are pushed just because Day 7 was).
+  **Note**: Day 16 also updated `pnpm-lock.yaml` itself (three new dependencies) — if you re-run
+  `pnpm install` locally and it wants to change unrelated packages too, that's normal lockfile
+  resolution drift, not something Day 16 broke.
 - Real local testing of Day 12 needs the user's own Docker MinIO container actually running
   (`docker compose up -d minio`, console at `localhost:9001`) - this sandbox has never had one
   available, same gap as the database in every prior day.
@@ -691,6 +744,10 @@ loops).** Never claim more confidence than what was actually run.
 - Real local testing of Day 15 needs two real organizations and a real invitation email flow (via
   Mailpit) against a real running MongoDB — this sandbox verified the ROUTING/auth-gate difference
   between the two acceptance routes, not the actual end-to-end invite-and-join experience.
+- Real local testing of Day 16 needs a real running Valkey to confirm actual THRESHOLD-crossing
+  behavior (the 21st rapid attempt genuinely returning 429) — this sandbox fully verified the
+  fail-open DEGRADED path instead (no Valkey available, same gap as every other piece of
+  infrastructure), which is actually the harder-to-reason-about half of this feature.
 - The README.md's "Status" line is stale (still says "Day 1 of 18") — worth fixing whenever
   convenient, it's a one-line change.
 - No `.env` file is assumed to exist in this sandbox — real local development (`pnpm dev` against
@@ -735,6 +792,6 @@ this file is a MAP for another AI picking up the project cold, not the whole ter
 ---
 
 **Bottom line for whoever picks this up next**: follow §5's rhythm exactly (including this file's
-own update step, §9), respect the conventions in §4 (they're consistent across 13,300+ lines of
+own update step, §9), respect the conventions in §4 (they're consistent across 13,600+ lines of
 code so far — don't introduce a different style), verify using §7's methodology, and be honest
-about the Day 16-18 uncertainty in §6 until you can get your hands on the real schedule PDF.
+about the Day 17-18 uncertainty in §6 until you can get your hands on the real schedule PDF.

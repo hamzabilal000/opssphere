@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom"; // same BrowserRouter you already use
 import App from "./App";
 import { ToastProvider } from "./components/ui/Toast"; // DAY 6: shared toast notifications
+import { ErrorBoundary } from "./components/shell/ErrorBoundary"; // DAY 16: catches render crashes
 import "./index.css"; // Tailwind's generated styles get pulled in here
 
 // ----------------------------------------------------------------------------
@@ -44,20 +45,28 @@ const queryClient = new QueryClient();
 // you need to write differently yourself.
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {/* QueryClientProvider makes the queryClient above available to every
-        component in the app, no matter how deeply nested, without having
-        to manually pass it down as a prop. */}
-    <QueryClientProvider client={queryClient}>
-      {/* BrowserRouter enables react-router-dom's <Routes>/<Route> —
-          same as wrapping <App /> in your Pages-based projects, just done
-          here instead of inside App.tsx. */}
-      <BrowserRouter>
-        {/* DAY 6: ToastProvider wraps the whole app ONCE, here, so any
-            page/component can call useToast() no matter how deep it is. */}
-        <ToastProvider>
-          <App />
-        </ToastProvider>
-      </BrowserRouter>
-    </QueryClientProvider>
+    {/* DAY 16: the OUTERMOST wrapper, on purpose - if literally anything
+        inside (including QueryClientProvider/BrowserRouter/ToastProvider
+        themselves, however unlikely) throws while rendering, this is what
+        catches it and shows a friendly fallback instead of a blank white
+        screen. See components/shell/ErrorBoundary.tsx for the full
+        explanation of what this can and can't catch. */}
+    <ErrorBoundary>
+      {/* QueryClientProvider makes the queryClient above available to every
+          component in the app, no matter how deeply nested, without having
+          to manually pass it down as a prop. */}
+      <QueryClientProvider client={queryClient}>
+        {/* BrowserRouter enables react-router-dom's <Routes>/<Route> —
+            same as wrapping <App /> in your Pages-based projects, just done
+            here instead of inside App.tsx. */}
+        <BrowserRouter>
+          {/* DAY 6: ToastProvider wraps the whole app ONCE, here, so any
+              page/component can call useToast() no matter how deep it is. */}
+          <ToastProvider>
+            <App />
+          </ToastProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

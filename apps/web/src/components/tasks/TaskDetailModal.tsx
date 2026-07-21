@@ -8,7 +8,7 @@
 // acceptance test describes, all in one place instead of separate pages.
 // ============================================================================
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   X,
   Trash2,
@@ -115,6 +115,20 @@ export function TaskDetailModal({
   const { toast } = useToast();
   const meQuery = useMeQuery();
   const currentUserId = meQuery.data?.user.id;
+
+  // DAY 16 ("Hardening"): Escape closes the modal, same as clicking the X
+  // or the backdrop below - a keyboard-only user had NO way to dismiss
+  // this before today (no mouse, no escape route). This is the one
+  // genuinely missing accessibility affordance a modal absolutely needs;
+  // a full focus-trap (Tab cycling only within the dialog) is a further
+  // polish-phase upgrade, not required to fix the actual gap.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
 
   const updateTaskMutation = useUpdateTaskMutation(organizationId, projectId);
   const deleteTaskMutation = useDeleteTaskMutation(organizationId, projectId);
@@ -339,8 +353,22 @@ export function TaskDetailModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mt-8 mb-8">
+    // DAY 16: clicking the dimmed backdrop closes the modal too, the same
+    // way pressing Escape does above - `onClick` here fires for a click
+    // ANYWHERE inside this full-screen div, but the panel below stops that
+    // click from bubbling back up, so clicking the actual content never
+    // closes it.
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-slate-900/40 p-4 overflow-y-auto"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${task.parentTaskId ? "Subtask" : "Task"} details: ${task.title}`}
+        onClick={(e) => e.stopPropagation()}
+        className="bg-white rounded-lg shadow-xl w-full max-w-2xl mt-8 mb-8"
+      >
         {/* Header */}
         <div className="flex items-start justify-between gap-2 border-b border-slate-200 p-4">
           <div className="flex-1">
@@ -349,7 +377,7 @@ export function TaskDetailModal({
             </p>
             <h2 className="text-lg font-bold text-slate-900">{task.title}</h2>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <button onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-600">
             <X className="w-5 h-5" />
           </button>
         </div>

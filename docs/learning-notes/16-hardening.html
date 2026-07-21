@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 16 — Hardening</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 16 OF 18</div>
+  <h1>Hardening</h1>
+  <p class="sub">Valkey has sat in docker-compose.yml, completely unused, since Day 1 - even its own
+  env var (VALKEY_URL) has been silently ignored since Day 1, the exact same gotcha Day 12 found for
+  MinIO. Today it finally does something: backing rate limits on the routes worth attacking, alongside
+  a render-crash safety net and a small accessibility pass.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>"Hardening" days are grab-bags by nature - a handful of smaller, independent improvements rather
+than one feature, the same shape Day 3 and Day 11 already took. Today bundles three: rate limiting on
+login/register/forgot-password/reset-password/refresh/invitation-acceptance, backed by Valkey (closing
+an 16-day-old dead-code gap); a React error boundary so a genuine render-time bug shows a friendly
+screen instead of a blank one; and a small accessibility pass on the one modal in the app (Escape to
+close, click-the-backdrop to close, and aria-labels on every icon-only button that was missing one).</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every changed file has comments explaining what's new - especially <code>lib/rateLimiter.ts</code>,
+  where the most interesting (and most surprising) part of today's work lives.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. A THIRD "provisioned but silently ignored" env var, found the same way as Day 12's</h3>
+<p><code>VALKEY_URL=redis://localhost:6379</code> has been sitting in <code>.env</code>/
+<code>.env.example</code> since Day 1, next to a real <code>valkey</code> service in
+<code>docker-compose.yml</code> - and nothing ever read it, because <code>config/env.ts</code>'s Zod
+schema never asked for it. This is the exact same "a schema without <code>.strict()</code> silently
+ignores env vars it doesn't ask for" gotcha Day 12 found for MinIO's five env vars - by this point, a
+recognizable PATTERN worth actively checking for whenever a "why doesn't this setting do anything"
+question comes up in this codebase.</p>
+
+<h3>2. Fail-open, not fail-closed - and a real crash caught along the way</h3>
+<p>Rate limiting is a hardening LAYER on top of auth, not a replacement for it - so if Valkey (its
+storage backend) is unreachable, the correct behavior is to let requests through as if no limit
+existed, never to block everyone out or crash the server. Building this fail-open wrapper surfaced a
+genuine bug in the process: <code>rate-limit-redis</code>'s <code>RedisStore</code> constructor
+eagerly fires two "load this Lua script" commands the moment it's created, without anyone awaiting
+them - when Valkey is unreachable, those two promises reject almost immediately, and with nothing ever
+attached to their <code>.catch()</code>, Node treats that as an "unhandled rejection" and crashes the
+ENTIRE process by default. This wasn't a hypothetical worry - running the first draft against no
+Valkey crashed the server outright. The fix was two no-op <code>.catch()</code> calls attached right
+after construction (see <code>lib/rateLimiter.ts</code>'s comment on this exact spot).</p>
+
+<h3>3. Routing a THIRD-PARTY middleware's failures through the app's OWN error shape</h3>
+<p><code>express-rate-limit</code> has its own default "too many requests" response format - but
+every other error in this API already flows through one place, <code>errorHandler.ts</code>'s
+<code>ApiError</code> class, giving every response the same <code>{ success, code, message }</code>
+shape no matter which route or module produced it. Today's rate limiter uses a <code>handler</code>
+callback that calls <code>next(new ApiError(429, "RATE_LIMITED", ...))</code> instead of accepting the
+library's own default - a small thing, but it means the frontend never needs a special case just for
+rate-limited responses.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext">Someone scripts repeated login attempts against one account. Each request first passes through <code>authRateLimiter</code>, which asks Valkey "how many hits has this IP had in the last 15 minutes?"</div></div>
+<div class="step"><div class="num">2</div><div class="stext">Once that IP crosses 20 attempts in the window, the limiter calls its <code>handler</code>, which throws an <code>ApiError(429, "RATE_LIMITED", ...)</code> - the SAME error pipeline every other rejected request in the app already uses.</div></div>
+<div class="step"><div class="num">3</div><div class="stext">Separately: if Valkey happens to be down entirely, every one of those hit-counting attempts fails - but <code>failOpenStore</code> catches that failure and reports "this looks like a first-ever hit," so the request sails through instead of getting stuck or crashing.</div></div>
+<div class="step"><div class="num">4</div><div class="stext">On the frontend: if a genuine bug ever makes a component throw while rendering, <code>ErrorBoundary</code> (wrapping the entire app in <code>main.tsx</code>) catches it and shows "Something went wrong / Reload" instead of a blank white screen.</div></div>
+<div class="step"><div class="num">5</div><div class="stext">Opening a task's detail modal and pressing Escape (or clicking the dimmed backdrop) closes it - previously the only way out was clicking the small X in the corner.</div></div>
+
+<h2>The new/changed files, in one picture</h2>
+<pre><code>apps/api/src/
+├── config/env.ts              <span style="color:#7be9d8">→ + VALKEY_URL, finally validated instead of silently ignored</span>
+├── lib/rateLimiter.ts         <span style="color:#7be9d8">→ brand new - Valkey client, fail-open store wrapper, authRateLimiter</span>
+└── modules/auth/auth.routes.ts  <span style="color:#7be9d8">→ authRateLimiter added to register/login/refresh/forgot-password/
+                                   reset-password/accept/accept-existing</span>
+
+apps/web/src/
+├── main.tsx                          <span style="color:#7be9d8">→ + ErrorBoundary wrapping the entire app</span>
+├── components/shell/ErrorBoundary.tsx  <span style="color:#7be9d8">→ brand new - the one class component in the app</span>
+├── components/tasks/TaskDetailModal.tsx  <span style="color:#7be9d8">→ + Escape-to-close, backdrop-click-to-close, role="dialog",
+                                             aria-label on the close button</span>
+├── Pages/ProjectDetailPage.tsx         <span style="color:#7be9d8">→ + aria-label on the milestone delete button</span>
+└── Pages/RiskRegisterPage.tsx          <span style="color:#7be9d8">→ + aria-label on the risk edit/delete buttons</span></code></pre>
+
+<h2>A design detail worth understanding: the crash that only showed up when things went wrong</h2>
+<div class="callout amber">
+  <strong class="title">Testing the FAILURE path is what caught this bug</strong>
+  This bug would never have been noticed by testing the happy path (a real, running Valkey) - it only
+  exists when Valkey is UNREACHABLE, which is exactly the scenario this sandbox actually has, with no
+  real Valkey ever available. That turned into a genuine advantage this time: unlike Day 12's MinIO
+  (whose failure path could only be reasoned about, not run), this feature's fail-open behavior could
+  be - and was - fully exercised and proven correct, right here, without needing any real
+  infrastructure at all. Deliberately building and testing the DEGRADED path, not just the happy one,
+  is the actual lesson of today's hardening work.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>Rate limiting is per-IP only, not per-account or per-IP-plus-email - simpler, and still meaningfully
+  slows down scripted brute-forcing. Combining both would catch a slightly wider set of attack patterns,
+  a reasonable further hardening step.</li>
+  <li>No full focus-trap on the modal (Tab cycling ONLY within the dialog while it's open) - Escape and
+  backdrop-click cover the actual missing "how do I get out of this" gap; a full trap is a further
+  accessibility polish item, not required to fix today's gap.</li>
+  <li>The error boundary shows one generic message for every crash, with no per-error detail shown to
+  the user (it's still logged to the console) - a real production deployment would send crash details
+  to an error-tracking service instead of only the console, a reasonable further hardening step this
+  teaching project doesn't need to prove the underlying mechanism.</li>
+  <li>Security headers (helmet) and input handling were reviewed, not rebuilt - Day 1's helmet config
+  and the project's consistent use of Zod validation + React's automatic text-escaping (no
+  <code>dangerouslySetInnerHTML</code> anywhere in the codebase) were already solid; nothing needed
+  changing there today.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> - THIS TIME there ARE new packages (<code>express-rate-limit</code>,
+  <code>ioredis</code>, <code>rate-limit-redis</code>).</li>
+  <li>Make sure Docker's Valkey container is running (<code>docker compose up -d valkey</code> if needed).</li>
+  <li>Run <code>pnpm dev</code>, then fire 20+ rapid login attempts (wrong password is fine) - confirm
+  the 21st gets a 429 with a <code>RATE_LIMITED</code> code instead of the usual 401.</li>
+  <li>Stop the Valkey container and repeat - confirm login still works normally (no crash, no block) -
+  that's the fail-open path in action.</li>
+  <li>Open a task's detail modal and press Escape, then reopen it and click the dimmed area outside
+  the panel - both should close it.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every package (shared-types, validation, api, web) compiles with no TypeScript errors</td><td>✅ Confirmed (after fixing two real type-mismatch errors against ioredis/rate-limit-redis's stricter typings)</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) completes with no errors - 1,696 modules bundled successfully</td><td>✅ Confirmed</td></tr>
+  <tr><td>With NO Valkey running: repeated requests to a rate-limited route keep completing - no server crash, no hang</td><td>✅ Confirmed (this actually caught and fixed a real unhandled-rejection crash bug - see the callout above)</td></tr>
+  <tr><td>Rate-limit response headers are present on every response, proving the middleware genuinely ran even with Valkey down</td><td>✅ Confirmed</td></tr>
+  <tr><td>The "remaining" count never actually decreases when Valkey is down - proving fail-open (never really counts a hit) rather than fail-closed or crashing</td><td>✅ Confirmed</td></tr>
+  <tr><td>A bogus route still 404s</td><td>✅ Confirmed</td></tr>
+  <tr><td>The actual THRESHOLD-crossing behavior (21st attempt genuinely returns 429) against a real running Valkey</td><td>⏳ Needs you to test it locally - same gap as the database in every prior day; this sandbox proved the degraded path fully, but not real counting against a live Valkey</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Permission model enhancements (deny-rules/overrides on top of the flat allow-list) remain the last
+concretely-referenced unbuilt feature before Day 17 "Polish" and Day 18's unknown capstone day. See
+<code>docs/PROJECT_HANDOFF.md</code> for the full, honestly-uncertain breakdown.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 16 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

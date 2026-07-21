@@ -303,10 +303,18 @@ export default function RiskRegisterPage() {
                           )}
                           {canManage && (
                             <div className="flex items-center gap-2">
-                              <button onClick={() => startEdit(risk)} className="text-slate-400 hover:text-slate-600">
+                              <button
+                                onClick={() => startEdit(risk)}
+                                aria-label={`Edit risk ${risk.title}`}
+                                className="text-slate-400 hover:text-slate-600"
+                              >
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
-                              <button onClick={() => handleDelete(risk.id)} className="text-red-600">
+                              <button
+                                onClick={() => handleDelete(risk.id)}
+                                aria-label={`Delete risk ${risk.title}`}
+                                className="text-red-600"
+                              >
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>

@@ -178,7 +178,11 @@ export default function ProjectDetailPage() {
                 <span className="text-xs text-slate-400">— due {new Date(m.dueDate).toLocaleDateString()}</span>
               </label>
               {canManage && (
-                <button onClick={() => handleDeleteMilestone(m.id)} className="text-red-600">
+                <button
+                  onClick={() => handleDeleteMilestone(m.id)}
+                  aria-label={`Delete milestone ${m.name}`}
+                  className="text-red-600"
+                >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
               )}

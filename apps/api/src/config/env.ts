@@ -92,6 +92,14 @@ const envSchema = z.object({
   MINIO_BUCKET: z.string().min(1, "MINIO_BUCKET is required").default("opssphere"),
   MINIO_ACCESS_KEY: z.string().min(1, "MINIO_ACCESS_KEY is required"),
   MINIO_SECRET_KEY: z.string().min(1, "MINIO_SECRET_KEY is required"),
+
+  // DAY 16 — same exact gotcha as MINIO_* on Day 12, a THIRD time now:
+  // `VALKEY_URL=redis://localhost:6379` has been sitting in .env/
+  // .env.example since Day 1 (see docker-compose.yml's `valkey` service),
+  // completely unread, because this schema never listed it. Today's
+  // rate limiter (lib/rateLimiter.ts) is the first thing that finally
+  // asks for it.
+  VALKEY_URL: z.string().min(1, "VALKEY_URL is required").default("redis://localhost:6379"),
 });
 
 // .safeParse(...) checks `process.env` (all your real environment variables)
