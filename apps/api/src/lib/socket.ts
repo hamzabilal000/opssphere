@@ -44,6 +44,14 @@ export function projectRoom(projectId: string): string {
   return `project:${projectId}`;
 }
 
+// DAY 17: the other kind of room this app needs - one per USER instead of
+// one per project. A project room only makes sense for people actively
+// looking at that board; a notification needs to reach someone no matter
+// WHICH page they're currently on, as long as they're connected at all.
+export function userRoom(userId: string): string {
+  return `user:${userId}`;
+}
+
 // Called ONCE from index.ts, right after the plain HTTP server is created -
 // see index.ts for why Socket.IO needs the raw http.Server (not just the
 // Express `app`) to attach itself to.
@@ -90,6 +98,14 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
 
   io.on("connection", (socket: Socket) => {
     logger.debug({ userId: socket.data.userId, socketId: socket.id }, "socket connected");
+
+    // DAY 17: unlike a project's room (only joined once the frontend asks,
+    // per board it's actually looking at), a socket joins ITS OWN user
+    // room automatically, right here, the moment it connects - no
+    // "join-user" event needed, since we already know socket.data.userId
+    // from the auth check above, and there's no membership to re-verify
+    // (a user always has full access to their own notifications).
+    void socket.join(userRoom(socket.data.userId));
 
     // ---- Joining a project's room -----------------------------------
     // A connected socket isn't automatically in any room - the FRONTEND
@@ -151,4 +167,11 @@ export function initSocketServer(httpServer: HttpServer): SocketIOServer {
 // anyway.
 export function emitToProject(projectId: string, event: string, payload: unknown): void {
   io?.to(projectRoom(projectId)).emit(event, payload);
+}
+
+// DAY 17: same idea as emitToProject, aimed at one person instead of one
+// project's room - see notification.service.ts's createNotification for
+// the one caller of this so far.
+export function emitToUser(userId: string, event: string, payload: unknown): void {
+  io?.to(userRoom(userId)).emit(event, payload);
 }

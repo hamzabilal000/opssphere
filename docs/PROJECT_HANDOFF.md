@@ -59,7 +59,7 @@ that reconstruction as a best-effort placeholder, not a confirmed spec, and say 
 
 ---
 
-## 3. Repository structure (as of Day 16)
+## 3. Repository structure (as of Day 17)
 
 ```
 OpsSphere/
@@ -68,7 +68,10 @@ OpsSphere/
 │   │   └── src/
 │   │       ├── config/env.ts        Zod-validated environment config, fails fast on boot
 │   │       ├── lib/                 db.ts, logger.ts, password.ts, mailer.ts,
-│   │       │                        socket.ts (Day 9 — Socket.IO server, auth, rooms),
+│   │       │                        socket.ts (Day 9 — Socket.IO server, auth, rooms;
+│   │       │                        extended Day 17 with userRoom()/emitToUser() — a
+│   │       │                        per-USER room, auto-joined on connect, alongside the
+│   │       │                        existing per-project rooms),
 │   │       │                        storage.ts (Day 12 — MinIO client, signed URLs),
 │   │       │                        rateLimiter.ts (Day 16 — Valkey client, fail-open store,
 │   │       │                        authRateLimiter)
@@ -95,6 +98,9 @@ OpsSphere/
 │   │       │   │                    (Day 10, ORG-level, not under a project)
 │   │       │   ├── risks/           risk model + service/controller/routes (Day 11 -
 │   │       │   │                    PROJECT-level, unlike tickets - see risk.model.ts)
+│   │       │   ├── notifications/   (DAY 17, NEW) notification model + service/controller/
+│   │       │   │                    routes - belongs to a USER, not one organization;
+│   │       │   │                    mounted at its own top-level "/api/v1/notifications"
 │   │       │   └── health/          health.routes.ts
 │   │       ├── app.ts                createApp() — assembles Express app, mounts every router
 │   │       │                          (deliberately does NOT touch Socket.IO — see index.ts)
@@ -106,7 +112,8 @@ OpsSphere/
 │           │   ├── ui/               Button, Card, Input, States (Loading/Empty/Error), Toast
 │           │   ├── shell/            ProtectedRoute, AppShell, Sidebar, Topbar, ErrorBoundary
 │           │   │                     (Day 16 — the one class component in the app, catches
-│           │   │                     render-time crashes)
+│           │   │                     render-time crashes), CommandPalette (Day 17, NEW —
+│           │   │                     Cmd/Ctrl+K quick navigation, mounted once in AppShell)
 │           │   └── tasks/            TaskDetailModal (Day 8, extended Day 9 with comment edit/
 │           │                         delete + mention highlighting; extended Day 11 with
 │           │                         Dependencies + Checklist sections; extended Day 12 with a
@@ -122,6 +129,8 @@ OpsSphere/
 │           │                         expired-token 401, with in-flight dedup — see §4)
 │           ├── lib/queries.ts        Every useQuery/useMutation hook, built on lib/api.ts
 │           ├── lib/socket.ts         Day 9 — useProjectSocket() hook, one shared client connection
+│           │                         (extended Day 17 with useNotificationSocket() - no "join a
+│           │                         room" step needed, unlike useProjectSocket)
 │           ├── store/activeOrgStore.ts   Zustand — "which organization is currently selected"
 │           └── App.tsx               ONLY routes — no logic lives here, ever
 ├── packages/
@@ -131,7 +140,7 @@ OpsSphere/
 │   ├── eslint-config/                Shared lint rules
 │   └── tsconfig/                     Shared base tsconfig
 ├── docs/
-│   ├── learning-notes/               01 through 16 (HTML, styled, one per completed day)
+│   ├── learning-notes/               01 through 17 (HTML, styled, one per completed day)
 │   └── PROJECT_HANDOFF.md            This file — keep it updated after every day (see §9)
 ├── docker-compose.yml               MongoDB, Valkey, Mailpit, MinIO
 └── README.md                        Currently STALE — still says "Day 1 of 18", update this
@@ -320,6 +329,30 @@ make the codebase feel inconsistent and will likely surprise whoever reads it ne
   backdrop-click) way out.** These are the two concrete, checkable minimums for any future modal or
   icon-only control added to this app — a full focus-trap and broader WCAG audit are further polish,
   not required to close the basic gap.
+
+**Notifications - a model that belongs to a PERSON, not an organization (Day 17 onward):**
+- Unlike every other model, `Notification` is never queried under
+  `/organizations/:organizationId/...` - it's mounted at its own top-level `/api/v1/notifications`
+  path (same reasoning as `/auth/sessions`), because the same person can have notifications spanning
+  SEVERAL different organizations at once (a natural fit alongside Day 15's multi-org membership).
+  Every route just needs `requireAuth` — no `requireOrgMembership`, no permission check — since every
+  query already filters by `req.userId` itself.
+- **A second Socket.IO room shape: per-USER, not per-project.** `lib/socket.ts`'s `userRoom(userId)` /
+  `emitToUser(userId, ...)` mirror `projectRoom`/`emitToProject`, but a socket joins its OWN user room
+  automatically the instant it connects (no explicit "join" event, unlike `join-project` — there's no
+  membership to re-check, a user always has full access to their own notifications). Reuse this exact
+  shape for any future feature that needs to reach a specific person regardless of which page they're
+  on.
+- **`createNotification` does its own socket emitting, breaking the usual "controller decides when to
+  broadcast" rule — on purpose.** A notification IS the broadcast; there's no separate HTTP response
+  for it to piggyback on the way a task update has one. `task.service.ts`'s `notifyNewAssignees`/
+  `notifyMentions` just call `createNotification(...)` and don't return anything extra to their
+  controllers for this purpose — the create-the-row-and-tell-them step is self-contained in
+  `notification.service.ts`.
+- **A notification's `message`/`linkPath` are computed ONCE, at creation time, and never
+  recalculated** — the opposite instinct from Day 11's `riskScore` (always computed fresh, never
+  stored). A notification is a small, permanent record of "this happened," not a live view that could
+  go stale or break if the thing it refers to is later renamed or deleted.
 
 **Real-time (Day 9 onward):**
 - `apps/api/src/lib/socket.ts` holds the ONE Socket.IO server instance (module-level variable,
@@ -623,7 +656,7 @@ email exists by the time it's called, it now points the caller at the other rout
 to create a duplicate. No new permission, no new model — `Invitation`, `Membership`, and `Role` were
 all already exactly what this needed.
 
-### ✅ Day 16 — Hardening (most recently completed)
+### ✅ Day 16 — Hardening
 A grab-bag day, the same shape Day 3 and Day 11 already took — several smaller, independent
 improvements rather than one feature. Rate limiting (`express-rate-limit`) now gates
 register/login/refresh/forgot-password/reset-password/accept-invitation, backed by Valkey
@@ -640,21 +673,37 @@ button). Verified the fail-open path directly and completely in this sandbox (no
 needed to prove "requests keep flowing and the server doesn't crash when Valkey is down") — a
 stronger verification story than most hardening work usually gets.
 
+### ✅ Day 17 — Polish (most recently completed)
+Named explicitly once, back in the Day 6 learning note: *"Command palette, keyboard shortcuts, and a
+notifications drawer are explicitly Day 17 polish, not today."* All three landed. A new
+`Notification` module (see §4's new convention block) is triggered by two events so far -
+task assignment and @mentions in comments (`task.service.ts`'s `notifyNewAssignees`/`notifyMentions`)
+- and delivered live via a NEW kind of Socket.IO room, one per USER rather than one per project
+(`userRoom`/`emitToUser` in `lib/socket.ts`, auto-joined on connect, no explicit "join" event needed).
+`Topbar.tsx` gained a bell icon with a live-updating unread badge and a dropdown list; clicking a
+notification marks it read and navigates to the relevant board. Separately, `CommandPalette.tsx`
+(mounted once in `AppShell.tsx`) opens on Cmd/Ctrl+K from anywhere in the app, searching
+organizations, the active organization's projects, and a handful of static pages - Enter jumps to the
+first match. `notification.service.ts`'s `createNotification` deliberately breaks the usual
+"controller decides when to broadcast" rule (see §4) - a notification IS the broadcast, so creating
+the row and emitting it are one atomic step in one file, not split across a service/controller
+boundary the way every other broadcast in this app is. Verified the full auth-gate surface of the new
+routes plus a real (DB-free) socket connection proving the new auto-join-a-user-room logic never
+crashes a connection, even for a user with no other data at all.
+
 ---
 
-### ⚠️ Days 17-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
+### ⚠️ Day 18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
 
 The schedule and build-guide PDFs referenced by the README are **not present in this repo**. What
-follows for Days 17-18 is reconstructed **only** from forward-looking comments already written into
-the Day 1-16 code and learning notes.
+follows for Day 18 is reconstructed **only** from forward-looking comments already written into the
+Day 1-17 code and learning notes.
 
-**Still unordered, but explicitly on the list somewhere:**
+**Still on the list, no day ever assigned to it specifically:**
 - **Permission model enhancements** — deny-rules or overrides on top of the flat allow-list (Day 5
-  explicitly scoped these out, calling them a possible future addition, no day given).
-
-**Day 17 — Polish** *(named explicitly once)*
-Per the Day 6 learning note: *"Command palette, keyboard shortcuts, and a notifications drawer are
-explicitly Day 17 polish, not today."*
+  explicitly scoped these out, calling them a possible future addition, no day given). Nothing in the
+  codebase ties this to Day 18 specifically over any other remaining day - flag it as a candidate, not
+  a confirmed plan, if you pick this up.
 
 **Day 18 — unknown** *(zero hints anywhere in the codebase)*
 No comment anywhere references "Day 18." For an 18-day plan ending here, a final wrap-up day
@@ -724,13 +773,13 @@ loops).** Never claim more confidence than what was actually run.
 
 ## 8. Current state / how to resume
 
-- Git: as of Day 16, the working tree has the Day 16 changes (plus Days 12-15 and the post-Day-11
+- Git: as of Day 17, the working tree has the Day 17 changes (plus Days 12-16 and the post-Day-11
   role-permission-editing fix) staged but **not yet committed** (the user has not asked for an
   automatic push since Day 7 — check `git log` and `git status` first before assuming anything
-  about what's actually committed; don't assume Days 8-16 are pushed just because Day 7 was).
-  **Note**: Day 16 also updated `pnpm-lock.yaml` itself (three new dependencies) — if you re-run
+  about what's actually committed; don't assume Days 8-17 are pushed just because Day 7 was).
+  **Note**: Day 16 updated `pnpm-lock.yaml` itself (three new dependencies) — if you re-run
   `pnpm install` locally and it wants to change unrelated packages too, that's normal lockfile
-  resolution drift, not something Day 16 broke.
+  resolution drift, not something Day 16 broke. Day 17 added no new dependencies.
 - Real local testing of Day 12 needs the user's own Docker MinIO container actually running
   (`docker compose up -d minio`, console at `localhost:9001`) - this sandbox has never had one
   available, same gap as the database in every prior day.
@@ -748,6 +797,12 @@ loops).** Never claim more confidence than what was actually run.
   behavior (the 21st rapid attempt genuinely returning 429) — this sandbox fully verified the
   fail-open DEGRADED path instead (no Valkey available, same gap as every other piece of
   infrastructure), which is actually the harder-to-reason-about half of this feature.
+- Real local testing of Day 17 needs two real browser sessions and a real running MongoDB - one
+  person mentioning/assigning another, confirming the notification arrives LIVE (no refresh) and the
+  command palette's search returns real organizations/projects. This sandbox verified the full
+  auth-gate surface of the new routes and a real, DB-free socket connection proving the new
+  auto-join-a-user-room logic doesn't crash - not the actual end-to-end mention-to-badge-update
+  experience.
 - The README.md's "Status" line is stale (still says "Day 1 of 18") — worth fixing whenever
   convenient, it's a one-line change.
 - No `.env` file is assumed to exist in this sandbox — real local development (`pnpm dev` against
@@ -792,6 +847,6 @@ this file is a MAP for another AI picking up the project cold, not the whole ter
 ---
 
 **Bottom line for whoever picks this up next**: follow §5's rhythm exactly (including this file's
-own update step, §9), respect the conventions in §4 (they're consistent across 13,600+ lines of
+own update step, §9), respect the conventions in §4 (they're consistent across 14,000+ lines of
 code so far — don't introduce a different style), verify using §7's methodology, and be honest
-about the Day 17-18 uncertainty in §6 until you can get your hands on the real schedule PDF.
+about the Day 18 uncertainty in §6 until you can get your hands on the real schedule PDF.

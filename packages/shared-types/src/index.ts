@@ -468,6 +468,10 @@ export const SOCKET_EVENTS = {
   COMMENT_CREATED: "comment:created",
   COMMENT_UPDATED: "comment:updated",
   COMMENT_DELETED: "comment:deleted",
+  // DAY 17: unlike every event above (broadcast to a PROJECT room - anyone
+  // looking at that board), this one is emitted to a single USER's own
+  // room - see lib/socket.ts's userRoom() and emitToUser().
+  NOTIFICATION_CREATED: "notification:created",
 } as const;
 
 export type SocketEventName = (typeof SOCKET_EVENTS)[keyof typeof SOCKET_EVENTS];
@@ -488,6 +492,9 @@ export interface CommentChangedPayload {
 export interface CommentDeletedPayload {
   taskId: string;
   commentId: string;
+}
+export interface NotificationCreatedPayload {
+  notification: NotificationSummary;
 }
 
 // ============================================================================
@@ -568,4 +575,34 @@ export interface RiskSummary {
   createdByEmail: string;
   createdAt: string;
   updatedAt: string;
+}
+
+// ============================================================================
+// DAY 17 — NOTIFICATIONS TYPES
+// ----------------------------------------------------------------------------
+// Unlike every module so far, a Notification belongs to exactly one USER,
+// not to one organization's data at large - the same person can have
+// notifications from SEVERAL different organizations at once (a natural
+// fit alongside Day 15's multi-organization membership). `organizationId`
+// is still on every notification (so a click can navigate straight back
+// into the right org's context), but the LIST endpoint is never org-scoped
+// in its URL - see notification.routes.ts, mounted the same top-level way
+// auth.routes.ts's /sessions is.
+// ============================================================================
+
+export type NotificationType = "mention" | "assignment";
+
+export interface NotificationSummary {
+  id: string;
+  organizationId: string;
+  type: NotificationType;
+  // Precomputed server-side, plain text - "Alice mentioned you in a
+  // comment on 'Fix login bug'" - so the frontend never has to know how
+  // to phrase each notification TYPE differently.
+  message: string;
+  // Where clicking this notification should navigate to - always a path
+  // under /dashboard/... that already exists elsewhere in the app.
+  linkPath: string;
+  isRead: boolean;
+  createdAt: string;
 }

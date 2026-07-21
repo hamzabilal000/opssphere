@@ -21,6 +21,7 @@ import type {
   TicketSummary,
   TicketCommentSummary,
   RiskSummary,
+  NotificationSummary,
 } from "@opssphere/shared-types";
 import type {
   RegisterInput,
@@ -865,4 +866,22 @@ export function updateRisk(
 
 export function deleteRisk(organizationId: string, projectId: string, riskId: string): Promise<null> {
   return apiRequest(`${risksBase(organizationId, projectId)}/${encodeURIComponent(riskId)}`, { method: "DELETE" });
+}
+
+// ---- DAY 17: notifications - NOT organization-scoped in the URL, unlike
+// almost everything else in this file. A notification belongs to whoever
+// is logged in, who may have notifications from several different
+// organizations at once (see InvitationPreview's Day 15 note on the same
+// idea) - same reasoning as listSessions() above having no organizationId
+// either.
+export function listMyNotifications(): Promise<{ notifications: NotificationSummary[]; unreadCount: number }> {
+  return apiRequest("/notifications");
+}
+
+export function markNotificationRead(notificationId: string): Promise<null> {
+  return apiRequest(`/notifications/${encodeURIComponent(notificationId)}/read`, { method: "PATCH" });
+}
+
+export function markAllNotificationsRead(): Promise<null> {
+  return apiRequest("/notifications/read-all", { method: "PATCH" });
 }

@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 17 — Polish</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 17 OF 18</div>
+  <h1>Polish</h1>
+  <p class="sub">Day 6's learning note named this day explicitly: "command palette, keyboard shortcuts,
+  and a notifications drawer are explicitly Day 17 polish, not today." Eleven days later, today is that
+  day.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Three features, one theme: making the app feel faster to actually USE, not adding new business
+data. A real notifications system (backend model + two triggers - @mentions and task assignment -
+plus a bell icon with a live-updating unread badge) tells people when something needs their attention
+without them needing to go looking for it. A command palette (Cmd/Ctrl+K) lets anyone jump straight to
+an organization, a project's board, or a static page by typing a few letters, instead of clicking
+through the sidebar every time. Both ride on infrastructure earlier days already built - Day 9's
+Socket.IO connection and Day 6/15's existing organization/project queries - rather than needing
+anything fundamentally new.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every changed file has comments explaining what's new - especially
+  <code>notification.service.ts</code>, which documents a deliberate break from this project's usual
+  "controller decides when to broadcast" pattern.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. A model that belongs to a PERSON, not to one organization's data</h3>
+<p>Every model so far (Task, Ticket, Risk, ...) is scoped to ONE organization's URL -
+<code>/organizations/:organizationId/...</code>. A `Notification` breaks that pattern on purpose: the
+same logged-in person might have notifications from SEVERAL different organizations at once (a
+natural fit alongside Day 15's multi-org membership), so its list endpoint is mounted at its own
+top-level path, <code>/api/v1/notifications</code>, the same way Day 3's <code>/auth/sessions</code>
+is about the logged-in person rather than any one organization.</p>
+
+<h3>2. A second kind of Socket.IO "room" - one per USER instead of one per project</h3>
+<p>Every broadcast since Day 9 has gone to a PROJECT room, joined only when someone's actually looking
+at that board. A notification needs to reach someone no matter which page they're on - so
+<code>lib/socket.ts</code> gained a second room concept, <code>userRoom(userId)</code>, that every
+socket joins AUTOMATICALLY the instant it connects (no explicit "join" event needed, unlike
+`join-project` - we already know the user's id from the same auth check every socket goes through).
+<code>emitToUser(userId, ...)</code> is the new counterpart to <code>emitToProject(...)</code>.</p>
+
+<h3>3. Breaking the "controller decides when to broadcast" rule, on purpose</h3>
+<p>Every prior day's pattern: the SERVICE returns data, the CONTROLLER decides to call
+<code>emitToProject(...)</code> afterward. <code>notification.service.ts</code>'s
+<code>createNotification</code> does its OWN emitting instead, right where the row gets created - a
+deliberate exception, not an oversight. Reasoning: a notification IS the broadcast; there's no
+separate "HTTP response" for it the way a task update has one. Threading "by the way, also notify
+these 3 people" back through <code>task.controller.ts</code> would be more plumbing for no real
+benefit over just handling "create it and tell them" as one atomic step in one place.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext">Someone comments "@bob@example.com can you check this?" on a task. <code>task.service.ts</code>'s <code>createComment</code> detects the mention (Day 9's existing logic) and calls the new <code>notifyMentions</code> helper.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><code>notifyMentions</code> calls <code>createNotification</code>, which writes one <code>Notification</code> row AND immediately calls <code>emitToUser(bobsUserId, "notification:created", ...)</code> - both in the same step.</div></div>
+<div class="step"><div class="num">3</div><div class="stext">If Bob's browser is open (on ANY page, not just this task's board), his socket is sitting in his own user room already - the event arrives instantly, and <code>Topbar.tsx</code>'s <code>useNotificationSocket</code> hook invalidates the notifications query.</div></div>
+<div class="step"><div class="num">4</div><div class="stext">The bell icon's unread badge updates without Bob refreshing anything. Clicking the bell opens a dropdown listing his notifications; clicking one marks it read and navigates him straight to that project's board.</div></div>
+<div class="step"><div class="num">5</div><div class="stext">Separately: anyone presses Cmd/Ctrl+K anywhere in the app. <code>CommandPalette.tsx</code> (mounted once in <code>AppShell.tsx</code>) opens, already showing every organization, every project in the currently-active organization, and a handful of static pages - typing filters the list, Enter jumps to the first match.</div></div>
+
+<h2>The new/changed files, in one picture</h2>
+<pre><code>packages/shared-types/src/index.ts   <span style="color:#7be9d8">→ + NOTIFICATION_CREATED event, NotificationSummary, NotificationCreatedPayload</span>
+
+apps/api/src/
+├── lib/socket.ts                <span style="color:#7be9d8">→ + userRoom(), emitToUser(), auto-join on connect</span>
+├── modules/notifications/       <span style="color:#7be9d8">→ brand new module - model, service (createNotification +
+│                                   listMyNotifications + markRead/markAllRead), controller, routes</span>
+└── modules/tasks/task.service.ts  <span style="color:#7be9d8">→ + notifyNewAssignees (createTask/updateTask),
+                                     + notifyMentions (createComment/updateComment)</span>
+
+apps/web/src/
+├── lib/api.ts                        <span style="color:#7be9d8">→ + listMyNotifications/markNotificationRead/markAllNotificationsRead</span>
+├── lib/queries.ts                      <span style="color:#7be9d8">→ + useNotificationsQuery + two mark-read mutations</span>
+├── lib/socket.ts                         <span style="color:#7be9d8">→ + useNotificationSocket (no "join" step needed, unlike useProjectSocket)</span>
+├── components/shell/Topbar.tsx             <span style="color:#7be9d8">→ + bell icon, unread badge, notifications dropdown</span>
+├── components/shell/CommandPalette.tsx       <span style="color:#7be9d8">→ brand new - Cmd/Ctrl+K quick navigation</span>
+├── components/shell/AppShell.tsx               <span style="color:#7be9d8">→ mounts CommandPalette once</span>
+└── components/shell/Sidebar.tsx                  <span style="color:#7be9d8">→ + a small "⌘K to jump anywhere" hint</span></code></pre>
+
+<h2>A design detail worth understanding: message text is frozen at creation time</h2>
+<div class="callout amber">
+  <strong class="title">A notification is a small, permanent record - not a live view</strong>
+  <code>Notification.message</code> and <code>linkPath</code> are both computed ONCE, the moment the
+  notification is created, and never recalculated. If the task that triggered a notification later
+  gets renamed (or even deleted), the notification still reads exactly as it did the moment it fired -
+  "You were assigned to task 'Fix login bug'" doesn't quietly become "Fix login bug (renamed)" or start
+  pointing at nothing. This is the same instinct as Day 11's `riskScore` being computed fresh every
+  time (never stored) taken in the OPPOSITE direction on purpose: a risk score should always reflect
+  current reality, but a notification should always reflect what was true at the moment it happened -
+  two different kinds of data, two deliberately different rules.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>Only two notification TRIGGERS (mention, assignment) - ticket assignment/status changes,
+  invitation acceptance, and risk ownership are all reasonable candidates for a THIRD+ trigger later,
+  following the exact same <code>createNotification(...)</code> call shape.</li>
+  <li>The command palette only searches the ACTIVE organization's projects, not every project across
+  every organization someone belongs to - switching organizations first (via the sidebar) is the
+  reasonable trade-off against firing N extra network requests every time Cmd+K is pressed.</li>
+  <li>No arrow-key navigation within the command palette's results list - typing to filter, then
+  clicking (or pressing Enter for the top match) covers the main use case without needing to track a
+  selected-index state.</li>
+  <li>No dedicated keyboard-shortcuts help screen - the sidebar's small "⌘K to jump anywhere" hint is
+  the one shortcut worth teaching; a fuller shortcuts reference is a reasonable future addition if more
+  shortcuts get added.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> - no new packages today.</li>
+  <li>Open a task, comment <code>@someone@example.com</code> (a real project member's email) - log in
+  as that person in a second browser and watch the bell badge update live, with no refresh.</li>
+  <li>Assign someone else to a task - same live badge update for them.</li>
+  <li>Click the bell, click a notification - confirm it marks read and navigates to that project's
+  board.</li>
+  <li>Press Cmd+K (or Ctrl+K) anywhere in the app - type part of a project or organization name, press
+  Enter.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every package (shared-types, validation, api, web) compiles with no TypeScript errors - clean on the first attempt, no fix-up round needed</td><td>✅ Confirmed</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) completes with no errors - 1,697 modules bundled successfully</td><td>✅ Confirmed</td></tr>
+  <tr><td>Every new notification route (list, mark-all-read, mark-one-read) correctly requires auth, and a bogus route still 404s</td><td>✅ Confirmed</td></tr>
+  <tr><td>A real socket connection (valid token, no database involved) connects successfully and auto-joins its own user room without crashing - proving the new connect-time logic is safe even for a user with no other data</td><td>✅ Confirmed</td></tr>
+  <tr><td>The actual end-to-end flow - a real mention/assignment creating a notification, the live badge update, and the command palette's search against real organizations/projects - against a real running MongoDB</td><td>⏳ Needs you to test it locally - same gap as the database in every prior day</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Day 18 is the final day of the reconstructed plan - no hints anywhere in the codebase point to what
+it covers. A wrap-up day (deployment docs, a demo script, final QA pass, README cleanup) is a
+reasonable guess for a capstone day, but that's a guess, not a documented fact. See
+<code>docs/PROJECT_HANDOFF.md</code> for the honest breakdown.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 17 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

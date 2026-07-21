@@ -753,3 +753,29 @@ export function useDeleteRiskMutation(organizationId: string, projectId: string)
       }),
   });
 }
+
+// ---- DAY 17: notifications ------------------------------------------------
+// One shared query key ("notifications") for the whole app - no
+// organizationId in it, since the list itself spans every organization the
+// logged-in person belongs to (see api.ts's listMyNotifications).
+const NOTIFICATIONS_QUERY_KEY = ["notifications"];
+
+export function useNotificationsQuery() {
+  return useQuery({ queryKey: NOTIFICATIONS_QUERY_KEY, queryFn: api.listMyNotifications });
+}
+
+export function useMarkNotificationReadMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (notificationId: string) => api.markNotificationRead(notificationId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY }),
+  });
+}
+
+export function useMarkAllNotificationsReadMutation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.markAllNotificationsRead(),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY }),
+  });
+}

@@ -19,6 +19,11 @@ import { TaskAttachment } from "./task-attachment.model.js";
 import { TimeEntry } from "./time-entry.model.js";
 import { ApiError } from "../../middleware/errorHandler.js";
 import { uploadFileToStorage, deleteFileFromStorage, getSignedDownloadUrl } from "../../lib/storage.js";
+// DAY 17: task assignment and @mentions are the two triggers for a
+// notification so far - see notification.service.ts's createNotification
+// for why THAT file does its own socket emitting instead of pushing it
+// back up to task.controller.ts.
+import { createNotification } from "../notifications/notification.service.js";
 import type {
   CreateSprintInput,
   UpdateSprintInput,
@@ -235,7 +240,7 @@ export async function createTask(
   createdBy: string,
   input: CreateTaskInput
 ): Promise<TaskSummary> {
-  await findProjectOrThrow(organizationId, projectId);
+  const project = await findProjectOrThrow(organizationId, projectId);
   await assertAssigneesAreOrgMembers(organizationId, input.assigneeIds);
 
   if (input.sprintId) {
@@ -269,20 +274,62 @@ export async function createTask(
     createdBy,
   });
 
+  // DAY 17: notify every assignee EXCEPT the creator themselves (assigning
+  // yourself a task you just made isn't news worth a notification for).
+  await notifyNewAssignees(organizationId, projectId, project.name, task.title, createdBy, input.assigneeIds);
+
   const [summary] = await toTaskSummaries([task]);
   return summary as TaskSummary;
+}
+
+// DAY 17: shared by createTask and updateTask - given a list of assignee
+// ids that are NEW as of this change, fire off one "you were assigned"
+// notification per person, skipping whoever just made the change (no
+// point notifying yourself).
+async function notifyNewAssignees(
+  organizationId: string,
+  projectId: string,
+  projectName: string,
+  taskTitle: string,
+  actingUserId: string,
+  newlyAssignedUserIds: string[]
+): Promise<void> {
+  const recipients = newlyAssignedUserIds.filter((id) => id !== actingUserId);
+  if (recipients.length === 0) return;
+
+  const linkPath = `/dashboard/organizations/${organizationId}/projects/${projectId}/board`;
+  await Promise.all(
+    recipients.map((userId) =>
+      createNotification({
+        organizationId,
+        userId,
+        type: "assignment",
+        message: `You were assigned to task "${taskTitle}" in ${projectName}.`,
+        linkPath,
+      })
+    )
+  );
 }
 
 export async function updateTask(
   organizationId: string,
   projectId: string,
   taskId: string,
+  actingUserId: string,
   input: UpdateTaskInput
 ): Promise<TaskSummary> {
   const task = await findTaskOrThrow(organizationId, projectId, taskId);
 
+  // DAY 17: captured BEFORE task.assigneeIds gets overwritten below, so we
+  // can tell exactly who is NEWLY added (vs. someone who was already an
+  // assignee and just happens to still be in the new list) - only new
+  // additions are worth a notification.
+  let newlyAssignedUserIds: string[] = [];
+
   if (input.assigneeIds !== undefined) {
     await assertAssigneesAreOrgMembers(organizationId, input.assigneeIds);
+    const previousAssigneeIds = new Set(task.assigneeIds.map((id) => id.toString()));
+    newlyAssignedUserIds = input.assigneeIds.filter((id) => !previousAssigneeIds.has(id));
     task.assigneeIds = input.assigneeIds.map((id) => new Types.ObjectId(id));
   }
 
@@ -321,6 +368,20 @@ export async function updateTask(
   }
 
   await task.save();
+
+  // DAY 17: only bother looking up the project's name if there's actually
+  // someone new to notify - no point paying for that query otherwise.
+  if (newlyAssignedUserIds.length > 0) {
+    const project = await Project.findOne({ _id: projectId, organizationId });
+    await notifyNewAssignees(
+      organizationId,
+      projectId,
+      project?.name ?? "a project",
+      task.title,
+      actingUserId,
+      newlyAssignedUserIds
+    );
+  }
 
   const [summary] = await toTaskSummaries([task]);
   return summary as TaskSummary;
@@ -559,13 +620,53 @@ export async function createComment(
   authorId: string,
   input: CreateTaskCommentInput
 ): Promise<TaskCommentSummary> {
-  await findTaskOrThrow(organizationId, projectId, taskId);
+  const task = await findTaskOrThrow(organizationId, projectId, taskId);
   const mentionedUserIds = await detectMentions(organizationId, projectId, input.body);
 
   const comment = await TaskComment.create({ organizationId, taskId, authorId, body: input.body, mentionedUserIds });
 
+  // DAY 17: every mention on a BRAND NEW comment is "new" by definition -
+  // no previous state to diff against, unlike updateComment below.
+  await notifyMentions(
+    organizationId,
+    projectId,
+    task.title,
+    authorId,
+    mentionedUserIds.map((id) => id.toString())
+  );
+
   const [summary] = await toCommentSummaries([comment]);
   return summary as TaskCommentSummary;
+}
+
+// DAY 17: shared by createComment and updateComment - fires one "you were
+// mentioned" notification per NEWLY mentioned person, skipping the
+// comment's own author (mentioning yourself isn't news).
+async function notifyMentions(
+  organizationId: string,
+  projectId: string,
+  taskTitle: string,
+  actingUserId: string,
+  newlyMentionedUserIds: string[]
+): Promise<void> {
+  const recipients = newlyMentionedUserIds.filter((id) => id !== actingUserId);
+  if (recipients.length === 0) return;
+
+  const author = await User.findById(actingUserId);
+  const authorEmail = author?.email ?? "Someone";
+  const linkPath = `/dashboard/organizations/${organizationId}/projects/${projectId}/board`;
+
+  await Promise.all(
+    recipients.map((userId) =>
+      createNotification({
+        organizationId,
+        userId,
+        type: "mention",
+        message: `${authorEmail} mentioned you in a comment on "${taskTitle}".`,
+        linkPath,
+      })
+    )
+  );
 }
 
 // `canManageTasks` is the caller's task.manage permission (resolved by the
@@ -581,7 +682,7 @@ export async function updateComment(
   canManageTasks: boolean,
   input: UpdateTaskCommentInput
 ): Promise<TaskCommentSummary> {
-  await findTaskOrThrow(organizationId, projectId, taskId);
+  const task = await findTaskOrThrow(organizationId, projectId, taskId);
   const comment = await TaskComment.findOne({ _id: commentId, taskId });
   if (!comment) {
     throw new ApiError(404, "RESOURCE_NOT_FOUND", "Comment not found.");
@@ -592,9 +693,20 @@ export async function updateComment(
     throw new ApiError(403, "FORBIDDEN", "Only the comment's author or a task manager can edit it.");
   }
 
+  // DAY 17: captured BEFORE overwriting mentionedUserIds, so only PEOPLE
+  // NEWLY ADDED to the mention list (not someone already mentioned before
+  // this edit) get a fresh notification.
+  const previouslyMentionedUserIds = new Set(comment.mentionedUserIds.map((id) => id.toString()));
+
   comment.body = input.body;
-  comment.mentionedUserIds = await detectMentions(organizationId, projectId, input.body);
+  const updatedMentionedUserIds = await detectMentions(organizationId, projectId, input.body);
+  comment.mentionedUserIds = updatedMentionedUserIds;
   await comment.save();
+
+  const newlyMentionedUserIds = updatedMentionedUserIds
+    .map((id) => id.toString())
+    .filter((id) => !previouslyMentionedUserIds.has(id));
+  await notifyMentions(organizationId, projectId, task.title, actingUserId, newlyMentionedUserIds);
 
   const [summary] = await toCommentSummaries([comment]);
   return summary as TaskCommentSummary;

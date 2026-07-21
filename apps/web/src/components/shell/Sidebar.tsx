@@ -140,6 +140,16 @@ export function Sidebar() {
           Profile
         </NavLink>
       </nav>
+
+      {/* DAY 17: a small, easy-to-miss-on-purpose hint that the command
+          palette exists - not a big banner, just enough for someone to
+          notice it once and remember it. */}
+      <div className="px-4 py-3 border-t border-white/10">
+        <p className="text-[11px] text-slate-500">
+          Press <kbd className="text-slate-300 border border-white/20 rounded px-1">⌘K</kbd> to jump
+          anywhere
+        </p>
+      </div>
     </aside>
   );
 }

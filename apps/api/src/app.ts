@@ -36,6 +36,7 @@ import { projectRouter } from "./modules/projects/project.routes.js";
 import { taskRouter } from "./modules/tasks/task.routes.js";
 import { ticketRouter } from "./modules/tickets/ticket.routes.js";
 import { riskRouter } from "./modules/risks/risk.routes.js";
+import { notificationRouter } from "./modules/notifications/notification.routes.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 
 // TYPESCRIPT NOTE: `export function createApp() { ... }` — a totally normal
@@ -120,6 +121,11 @@ export function createApp() {
   // DAY 11: risks are PROJECT-level (unlike tickets), same depth as
   // taskRouter - "/:organizationId/projects/:projectId/risks/...".
   app.use("/api/v1/organizations", riskRouter);
+  // DAY 17: notifications belong to a USER, not to one organization's
+  // data - mounted at its own top-level base path, same idea as
+  // "/api/v1/auth/sessions" being about the logged-in person, not
+  // scoped under any one organization either.
+  app.use("/api/v1/notifications", notificationRouter);
 
   // If NOTHING above matched the request's URL, this runs (see
   // middleware/errorHandler.ts for what it does).

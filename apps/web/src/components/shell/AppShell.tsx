@@ -12,6 +12,7 @@
 import { Outlet } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { CommandPalette } from "./CommandPalette"; // DAY 17: Cmd/Ctrl+K quick navigation
 
 export function AppShell() {
   return (
@@ -23,6 +24,8 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+      {/* Mounted once, here - renders nothing until Cmd/Ctrl+K is pressed. */}
+      <CommandPalette />
     </div>
   );
 }

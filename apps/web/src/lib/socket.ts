@@ -22,6 +22,7 @@ import type {
   TaskDeletedPayload,
   CommentChangedPayload,
   CommentDeletedPayload,
+  NotificationCreatedPayload,
 } from "@opssphere/shared-types";
 
 // TYPESCRIPT NOTE: this describes exactly which event names a caller of
@@ -122,4 +123,28 @@ export function useProjectSocket(
   }, [organizationId, projectId]);
 
   return { connected };
+}
+
+// DAY 17: a much simpler cousin of useProjectSocket above - no "join a
+// room" step needed at all, because the SERVER already puts every
+// connected socket into its own user room automatically the moment it
+// connects (see apps/api/src/lib/socket.ts's userRoom()). This just
+// listens for one event on the SAME shared connection, so it can be used
+// from Topbar.tsx (rendered on every logged-in page) regardless of
+// whether the person is currently looking at any particular project's
+// board.
+export function useNotificationSocket(onNotification: (payload: NotificationCreatedPayload) => void): void {
+  const handlerRef = useRef(onNotification);
+  handlerRef.current = onNotification;
+
+  useEffect(() => {
+    const socket = getSocket();
+    function listener(payload: NotificationCreatedPayload) {
+      handlerRef.current(payload);
+    }
+    socket.on(SOCKET_EVENTS.NOTIFICATION_CREATED, listener);
+    return () => {
+      socket.off(SOCKET_EVENTS.NOTIFICATION_CREATED, listener);
+    };
+  }, []);
 }

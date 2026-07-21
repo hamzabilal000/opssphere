@@ -161,6 +161,7 @@ export async function updateTaskHandler(req: Request, res: Response) {
     req.organizationId ?? "",
     String(req.params.projectId ?? ""),
     String(req.params.taskId ?? ""),
+    req.userId ?? "",
     parsed.data
   );
 
