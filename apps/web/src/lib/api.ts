@@ -58,27 +58,117 @@ import type {
   UpdateRiskInput,
 } from "@opssphere/validation";
 
-/**
- * Thin fetch wrapper. Every module's data-fetching hooks (useProjects,
- * useTickets, ...) will eventually build on something like this - one place
- * that knows the base URL, sends cookies, and unwraps the ApiResponse envelope.
- */
-async function apiRequest<T>(
-  path: string,
-  options: { method?: string; body?: unknown } = {}
-): Promise<T> {
-  const res = await fetch(`/api/v1${path}`, {
-    method: options.method ?? "GET",
-    credentials: "include", // same job as axios.defaults.withCredentials = true
-    headers: options.body ? { "Content-Type": "application/json" } : undefined,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+// DAY 13: a normal `Error` only ever carries a `.message` - there was
+// previously no way for calling code (or the retry logic added below) to
+// tell WHICH kind of failure just happened without fragile string-matching
+// on the message text. `ApiRequestError` carries the backend's own `code`
+// string (e.g. "AUTHENTICATION_REQUIRED", "SESSION_REVOKED" - see
+// ApiErrorResponse in shared-types) alongside the message. Since it still
+// EXTENDS Error, every existing `catch (err) { toast((err as Error).message) }`
+// site across the app keeps working completely unchanged - `.message` is
+// still there, this just adds one extra field nothing was reading before.
+class ApiRequestError extends Error {
+  code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.code = code;
+  }
+}
+
+// The actual fetch-and-unwrap logic, with NO retry behavior of its own -
+// `withAutoRefresh` below is what adds retrying on top of this. Both
+// apiRequest and apiUpload build on this same low-level function now,
+// instead of each duplicating the whole fetch/parse/throw dance (Day 12
+// had two nearly-identical copies of this; today merges them into one).
+async function rawFetch<T>(path: string, init: RequestInit): Promise<T> {
+  const res = await fetch(`/api/v1${path}`, { ...init, credentials: "include" });
   const body = (await res.json()) as ApiResponse<T>;
 
   if (!body.success) {
-    throw new Error(body.message);
+    throw new ApiRequestError(body.message, body.code);
   }
   return body.data;
+}
+
+// DAY 13: THE actual auto-refresh mechanism. `refreshInFlight` is a
+// MODULE-LEVEL variable (shared by every single call, across the whole
+// app) - if five components each fire a request at the exact moment the
+// access token expires, all five get a 401 back, but we only want to hit
+// POST /auth/refresh ONCE, not five times. The first caller to reach here
+// creates the shared promise; every other caller just awaits that SAME
+// promise instead of starting a second one. Once it settles,
+// `refreshInFlight` resets to null so the NEXT time a token genuinely
+// expires, a fresh refresh attempt is made.
+let refreshInFlight: Promise<void> | null = null;
+
+function refreshAccessTokenOnce(): Promise<void> {
+  if (!refreshInFlight) {
+    refreshInFlight = rawFetch<null>("/auth/refresh", { method: "POST" })
+      .then(() => undefined)
+      .finally(() => {
+        refreshInFlight = null;
+      });
+  }
+  return refreshInFlight;
+}
+
+// Wraps ONE attempt at a request with "if it failed because the access
+// token merely expired, silently refresh and try exactly once more."
+//
+// WHY RETRYING IS SAFE: a 401 AUTHENTICATION_REQUIRED means requireAuth
+// (auth.middleware.ts) rejected the request BEFORE it ever reached any
+// business logic or touched the database (see every prior day's smoke-
+// test notes on this exact point) - so the original attempt never did
+// anything. Retrying after a successful refresh is the first attempt that
+// actually runs, not a second copy of an action that already happened.
+//
+// WHY THIS CAN'T LOOP FOREVER: `attempt()` is called at most twice total
+// (the original call, then one retry) - the retry itself is a plain
+// `rawFetch`/no wrapper, so a 401 on the RETRY just fails for good,
+// exactly like today's behavior for everything else. The `path !==
+// "/auth/refresh"` check stops the refresh call from ever trying to
+// refresh itself if IT gets a 401 (that 401 means the refresh token is
+// dead - expired, already rotated, or revoked - which is the actual,
+// final "you need to log in again" case, not something more refreshing
+// can fix).
+async function withAutoRefresh<T>(path: string, attempt: () => Promise<T>): Promise<T> {
+  try {
+    return await attempt();
+  } catch (err) {
+    const tokenExpired = err instanceof ApiRequestError && err.code === "AUTHENTICATION_REQUIRED";
+    if (tokenExpired && path !== "/auth/refresh") {
+      try {
+        await refreshAccessTokenOnce();
+      } catch {
+        // The refresh itself failed (refresh token expired/rotated-away/
+        // revoked) - there's genuinely nothing left to try. Re-throw the
+        // ORIGINAL error, not the refresh's, so every existing catch site
+        // still sees the same familiar "please log in again" it always
+        // has - the user ultimately lands back on /login via
+        // ProtectedRoute exactly like before this day existed.
+        throw err;
+      }
+      return attempt(); // the ONE retry - not wrapped in withAutoRefresh again
+    }
+    throw err;
+  }
+}
+
+/**
+ * Thin fetch wrapper. Every module's data-fetching hooks (useProjects,
+ * useTickets, ...) build on this - one place that knows the base URL,
+ * sends cookies, unwraps the ApiResponse envelope, AND (as of Day 13)
+ * transparently survives one expired-access-token 401 without the caller
+ * ever knowing it happened.
+ */
+function apiRequest<T>(path: string, options: { method?: string; body?: unknown } = {}): Promise<T> {
+  const init: RequestInit = {
+    method: options.method ?? "GET",
+    headers: options.body ? { "Content-Type": "application/json" } : undefined,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  };
+  return withAutoRefresh(path, () => rawFetch<T>(path, init));
 }
 
 // DAY 12: a SECOND thin wrapper, just for real file uploads. Deliberately
@@ -87,19 +177,12 @@ async function apiRequest<T>(
 // important - it must NOT set a "Content-Type" header itself: the browser
 // sets `multipart/form-data; boundary=...` automatically when it sees the
 // body is a FormData instance, and manually setting Content-Type would
-// strip that boundary out and break the upload.
-async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetch(`/api/v1${path}`, {
-    method: "POST",
-    credentials: "include",
-    body: formData,
-  });
-  const body = (await res.json()) as ApiResponse<T>;
-
-  if (!body.success) {
-    throw new Error(body.message);
-  }
-  return body.data;
+// strip that boundary out and break the upload. DAY 13: now also gets the
+// exact same auto-refresh-and-retry behavior as apiRequest, for free, by
+// building on the same withAutoRefresh/rawFetch helpers.
+function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const init: RequestInit = { method: "POST", body: formData };
+  return withAutoRefresh(path, () => rawFetch<T>(path, init));
 }
 
 export function getHealth(): Promise<HealthStatus> {
@@ -144,11 +227,14 @@ export function getMe(): Promise<{ user: AuthUser }> {
 // compared to the Day 2 functions above.
 // ============================================================================
 
-// Note: we don't call this one ourselves anywhere yet. When an access
-// token expires (after 15 minutes), any protected call will fail with
-// AUTHENTICATION_REQUIRED - a later day can wire this up to run
-// automatically when that happens. For now it's here so the backend
-// feature is reachable and testable from the frontend.
+// DAY 13: this function itself is no longer what makes auto-refresh
+// happen - that logic now lives inside apiRequest/apiUpload's shared
+// withAutoRefresh wrapper (above), which calls POST /auth/refresh
+// directly whenever ANY request comes back with an expired-token 401, no
+// matter which page or hook triggered it. This export is kept around as a
+// plain, directly-callable version of the same endpoint - harmless, and
+// occasionally useful (e.g. a future "keep me logged in" button that
+// refreshes proactively rather than waiting for a 401).
 export function refreshSession(): Promise<null> {
   return apiRequest("/auth/refresh", { method: "POST" });
 }

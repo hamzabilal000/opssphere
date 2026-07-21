@@ -57,7 +57,7 @@ that reconstruction as a best-effort placeholder, not a confirmed spec, and say 
 
 ---
 
-## 3. Repository structure (as of Day 12)
+## 3. Repository structure (as of Day 13)
 
 ```
 OpsSphere/
@@ -102,6 +102,8 @@ OpsSphere/
 │           │                         TaskBoardPage, TicketsListPage, TicketDetailPage,
 │           │                         RiskRegisterPage (Day 11), SessionsPage, ProfilePage, ...)
 │           ├── lib/api.ts            Every fetch call to the backend, thin wrapper + typed functions
+│           │                         (Day 13 — apiRequest/apiUpload now auto-refresh-and-retry on an
+│           │                         expired-token 401, with in-flight dedup — see §4)
 │           ├── lib/queries.ts        Every useQuery/useMutation hook, built on lib/api.ts
 │           ├── lib/socket.ts         Day 9 — useProjectSocket() hook, one shared client connection
 │           ├── store/activeOrgStore.ts   Zustand — "which organization is currently selected"
@@ -113,7 +115,7 @@ OpsSphere/
 │   ├── eslint-config/                Shared lint rules
 │   └── tsconfig/                     Shared base tsconfig
 ├── docs/
-│   ├── learning-notes/               01 through 12 (HTML, styled, one per completed day)
+│   ├── learning-notes/               01 through 13 (HTML, styled, one per completed day)
 │   └── PROJECT_HANDOFF.md            This file — keep it updated after every day (see §9)
 ├── docker-compose.yml               MongoDB, Valkey, Mailpit, MinIO
 └── README.md                        Currently STALE — still says "Day 1 of 18", update this
@@ -212,6 +214,29 @@ make the codebase feel inconsistent and will likely surprise whoever reads it ne
   `config/env.ts`'s Zod schema never listed them — a real, live example of this gotcha, not a
   hypothetical one. If an env var seems to have no effect, check whether `env.ts` actually validates
   it before assuming the value itself is wrong.
+
+**Automatic token refresh (Day 13 onward):**
+- Every frontend request funnels through exactly two functions in `lib/api.ts`:
+  `apiRequest` (JSON) and `apiUpload` (multipart, Day 12). Both now build on a shared
+  `withAutoRefresh` wrapper — catch an `AUTHENTICATION_REQUIRED` 401 specifically (not any error),
+  call `POST /auth/refresh` once, retry the original request exactly once. Because every page/hook
+  already goes through these two functions, no page-level code had to change to get this behavior.
+- **Dedup concurrent refreshes with one module-level in-flight promise.** If several requests 401 at
+  the same moment (very normal — a dashboard firing several queries at once), only the FIRST one
+  starts a real `/auth/refresh` call; every other one awaits that same promise instead of starting
+  its own. This matters because refresh tokens ROTATE on every use (Day 3) — without dedup, a second
+  concurrent refresh call would present an already-stale, just-rotated-away token and fail for no
+  real reason. Reuse this exact "one shared in-flight promise, guarded by a module-level variable"
+  pattern for any future retry-on-failure logic that might otherwise fire multiple times concurrently.
+- **When the refresh itself fails, re-throw the ORIGINAL request's error, not the refresh's.** Every
+  existing catch site in the app already knows how to handle "this request failed" — throwing the
+  original error means none of them needed to change today, even though the underlying reason (a
+  fully-expired or revoked session, not just an expired access token) is new. `ApiRequestError` (a
+  small `Error` subclass carrying a `.code` field) is what makes checking the specific error code
+  possible without parsing strings.
+- This was a rare **frontend-only day** — `POST /auth/refresh` has worked correctly since Day 3; the
+  gap was only that nothing ever called it automatically. Don't assume every day needs a backend
+  change; check whether the backend already does the right thing before touching it.
 
 **Real-time (Day 9 onward):**
 - `apps/api/src/lib/socket.ts` holds the ONE Socket.IO server instance (module-level variable,
@@ -445,7 +470,7 @@ Member) can now have their PERMISSIONS edited through the app, just not their NA
 day adds another permission to the catalog, this is now the intended way for an existing org to pick
 it up, instead of needing a database migration.
 
-### ✅ Day 12 — Real File Storage (most recently completed)
+### ✅ Day 12 — Real File Storage
 Wired up the MinIO service that had been sitting in `docker-compose.yml`, completely unused, since
 Day 1 — including discovering its 5 env vars (`MINIO_ENDPOINT`/`MINIO_PORT`/`MINIO_BUCKET`/
 `MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`) had also been sitting in `.env`/`.env.example` since Day 1,
@@ -462,20 +487,32 @@ same "any active member, no permission gate" rule as Day 8's link attachments. F
 `TaskDetailModal.tsx` gained a file-upload control that shows both kinds of attachment in one
 identical-looking list.
 
+### ✅ Day 13 — Automatic Access-Token Refresh (most recently completed)
+A rare **frontend-only day** — `POST /auth/refresh` has worked correctly since Day 3; the gap was
+only that nothing ever called it automatically, so in practice users got logged out every 15
+minutes regardless of their 30-day refresh token. `lib/api.ts`'s two funnel functions
+(`apiRequest`/`apiUpload`) now build on a shared `withAutoRefresh` wrapper: catch an
+`AUTHENTICATION_REQUIRED` 401 specifically, call `/auth/refresh` once, retry the original request
+exactly once. A module-level `refreshInFlight` promise dedupes concurrent 401s (several queries
+firing at once when the token expires) into a single refresh call — necessary because refresh
+tokens rotate on every use (Day 3), so a naive second concurrent refresh would present an
+already-stale token and fail. When the refresh itself fails, the ORIGINAL request's error is
+re-thrown, not the refresh's, so every existing catch site keeps working unmodified; a new small
+`ApiRequestError` class (carrying a `.code` field) is what makes checking the specific error code
+possible. Verified with a custom pure-Node test that mocks `global.fetch` directly against
+`lib/api.ts` — no browser, backend, or database needed — confirming all three behaviors (dedup,
+independent re-refresh, original-error-surfaces-with-no-retry-loop) pass.
+
 ---
 
-### ⚠️ Days 13-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
+### ⚠️ Days 14-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
 
 The schedule and build-guide PDFs referenced by the README are **not present in this repo**. What
-follows for Days 13-18 is reconstructed **only** from forward-looking comments already written into
-the Day 1-12 code and learning notes. Treat the day numbers below with **decreasing confidence** the
-further you go — Days 13-15 are educated guesses about ordering; Day 18 has zero hints anywhere.
+follows for Days 14-18 is reconstructed **only** from forward-looking comments already written into
+the Day 1-13 code and learning notes. Treat the day numbers below with **decreasing confidence** the
+further you go — Days 14-15 are educated guesses about ordering; Day 18 has zero hints anywhere.
 
-**Days 13-15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
-- **Automatic access-token refresh** — the frontend has never actually called `POST /auth/refresh`
-  automatically; `lib/api.ts` explicitly flags this as a "later day" task since Day 3. Needs an
-  `apiRequest` wrapper upgrade: on a 401 `AUTHENTICATION_REQUIRED`, silently call `/refresh` once
-  and retry the original request.
+**Days 14-15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
 - **Permission model enhancements** — deny-rules or overrides on top of the flat allow-list (Day 5
   explicitly scoped these out, calling them a possible future addition, no day given).
 - **Drag-and-drop true reordering** — Day 8's `position` field only supports append-to-end; true
@@ -564,13 +601,17 @@ loops).** Never claim more confidence than what was actually run.
 
 ## 8. Current state / how to resume
 
-- Git: as of Day 12, the working tree has the Day 12 changes (plus the post-Day-11 role-permission-
-  editing fix) staged but **not yet committed** (the user has not asked for an automatic push since
-  Day 7 — check `git log` and `git status` first before assuming anything about what's actually
-  committed; don't assume Days 8-12 are pushed just because Day 7 was).
+- Git: as of Day 13, the working tree has the Day 13 changes (plus Day 12 and the post-Day-11
+  role-permission-editing fix) staged but **not yet committed** (the user has not asked for an
+  automatic push since Day 7 — check `git log` and `git status` first before assuming anything
+  about what's actually committed; don't assume Days 8-13 are pushed just because Day 7 was).
 - Real local testing of Day 12 needs the user's own Docker MinIO container actually running
   (`docker compose up -d minio`, console at `localhost:9001`) - this sandbox has never had one
   available, same gap as the database in every prior day.
+- Real local testing of Day 13 needs a real browser session against a real running backend (delete
+  the access-token cookie in DevTools, confirm the network trace shows a silent refresh-and-retry)
+  — this sandbox verified the retry LOGIC directly (mocked fetch), not the real end-to-end cookie
+  flow.
 - The README.md's "Status" line is stale (still says "Day 1 of 18") — worth fixing whenever
   convenient, it's a one-line change.
 - No `.env` file is assumed to exist in this sandbox — real local development (`pnpm dev` against
@@ -615,6 +656,6 @@ this file is a MAP for another AI picking up the project cold, not the whole ter
 ---
 
 **Bottom line for whoever picks this up next**: follow §5's rhythm exactly (including this file's
-own update step, §9), respect the conventions in §4 (they're consistent across 12,000+ lines of
+own update step, §9), respect the conventions in §4 (they're consistent across 12,500+ lines of
 code so far — don't introduce a different style), verify using §7's methodology, and be honest
-about the Day 13-18 uncertainty in §6 until you can get your hands on the real schedule PDF.
+about the Day 14-18 uncertainty in §6 until you can get your hands on the real schedule PDF.

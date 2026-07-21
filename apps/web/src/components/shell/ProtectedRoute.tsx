@@ -31,6 +31,13 @@ export function ProtectedRoute() {
 
   // getMe() failing means "no valid login cookie" - same as Days 2-5's
   // manual `.catch(() => navigate("/login"))`, just centralized here now.
+  // DAY 13 NOTE: this used to mean "the 15-minute access token expired."
+  // Now it means something stronger - getMe() already silently tried a
+  // refresh-and-retry internally (see lib/api.ts's withAutoRefresh) before
+  // ever getting here, so landing on isError means the REFRESH also
+  // failed - the whole 30-day session is genuinely over (expired, or
+  // revoked), not just its short-lived access token. Nothing in THIS
+  // component needed to change to get that upgrade for free.
   if (isError || !data) {
     return <Navigate to="/login" replace />;
   }

@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 13 — Automatic Access-Token Refresh</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 13 OF 18</div>
+  <h1>Automatic Access-Token Refresh</h1>
+  <p class="sub">Since Day 3, a 15-minute access token has meant "logged in for 15 minutes" in practice -
+  the app never actually used the 30-day refresh token sitting right next to it. Today closes that gap,
+  entirely on the frontend, with zero backend changes.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Day 3 built a real access/refresh token pair: a short-lived 15-minute access token and a 30-day
+refresh token that rotates every time it's used. But nothing ever called <code>POST /auth/refresh</code>
+automatically - so in practice, anyone using the app got logged out every 15 minutes regardless of
+that 30-day refresh token quietly sitting unused in a cookie. Today teaches the frontend's single fetch
+wrapper to notice an expired-token 401, silently refresh, and retry the original request - so the
+30-day session finally means something to the person using the app, not just to the database.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every changed file has comments explaining what's new - especially <code>lib/api.ts</code>, where
+  the entire feature lives. Read <code>withAutoRefresh</code> and <code>refreshAccessTokenOnce</code>
+  closely; they're short, but every line is doing something deliberate.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. A frontend-only day - no backend files changed</h3>
+<p>The backend route <code>POST /api/v1/auth/refresh</code> has worked correctly since Day 3: give it a
+valid refresh-token cookie, it rotates the refresh token and issues a new access token. The gap was
+never in the backend - it was that nothing on the frontend ever called it. That makes today unusual:
+every other day so far touched both <code>apps/api</code> and <code>apps/web</code>; today is
+<code>apps/web</code> only.</p>
+
+<h3>2. One shared wrapper, so every request gets the fix for free</h3>
+<p>Every API call in the app already funneled through one function - <code>apiRequest</code> (JSON
+calls) and <code>apiUpload</code> (file uploads, since Day 12). Both now build on a shared
+<code>withAutoRefresh</code> helper: try the request, and if it fails with the
+<code>AUTHENTICATION_REQUIRED</code> code specifically (not just any error), call
+<code>/auth/refresh</code> once and retry the original request exactly one time. Because every page and
+every hook already goes through these two functions, not one line of any actual page component needed
+to change to get this behavior.</p>
+
+<h3>3. The "thundering herd" problem - and the one-line fix</h3>
+<p>A real risk: if five different queries all fire at once when the access token has just expired (very
+normal - a dashboard loading orgs, projects, tasks, and tickets all at the same moment), each one would
+otherwise trigger its OWN call to <code>/auth/refresh</code>. Since refresh tokens ROTATE on every use
+(Day 3's design), the first refresh call would succeed and the second would then be using an already-
+rotated, now-stale refresh token - failing for no good reason. The fix is a single module-level variable,
+<code>refreshInFlight</code>: the first 401 starts the refresh and stores its promise; every other 401
+that arrives while that promise is still pending just awaits the SAME promise instead of starting its
+own. One refresh call serves however many requests failed at once.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext">A user has been active for 20+ minutes. Their 15-minute access token has quietly expired, but their 30-day refresh token is still fully valid.</div></div>
+<div class="step"><div class="num">2</div><div class="stext">They click into a project. <code>apiRequest</code> fires the request; the backend correctly rejects it with <code>401 AUTHENTICATION_REQUIRED</code>.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><code>withAutoRefresh</code> catches that specific error code, and calls <code>refreshAccessTokenOnce()</code> - which either starts a new <code>POST /auth/refresh</code> call, or (if one is already in flight from some other request) just waits on that same one.</div></div>
+<div class="step"><div class="num">4</div><div class="stext">The refresh succeeds; a new access-token cookie is set. <code>withAutoRefresh</code> retries the ORIGINAL request exactly once.</div></div>
+<div class="step"><div class="num">5</div><div class="stext">The retried request now succeeds - the user never sees an error, a redirect, or even a loading flicker beyond the request's normal latency.</div></div>
+<div class="step"><div class="num">6</div><div class="stext">If the refresh itself fails instead (the 30-day session is truly over - expired or revoked), the ORIGINAL 401 error is what gets thrown, not the refresh's error - and <code>ProtectedRoute</code> sends them to <code>/login</code>, same as before today.</div></div>
+
+<h2>The new/changed files, in one picture</h2>
+<pre><code>apps/web/src/
+├── lib/api.ts                   <span style="color:#7be9d8">→ + ApiRequestError, + withAutoRefresh, + refreshAccessTokenOnce (the whole feature)</span>
+├── lib/queries.ts                 <span style="color:#7be9d8">→ comment only - explains what an isError on useMeQuery now means</span>
+└── components/shell/ProtectedRoute.tsx  <span style="color:#7be9d8">→ comment only - same clarification</span>
+
+apps/api/  <span style="color:#7be9d8">→ NO changes - POST /auth/refresh already worked correctly since Day 3</span></code></pre>
+
+<h2>A design detail worth understanding: why the error that surfaces matters</h2>
+<div class="callout amber">
+  <strong class="title">The ORIGINAL error wins, not the refresh's error</strong>
+  When a refresh fails, <code>withAutoRefresh</code> deliberately re-throws the request's original
+  401 - not whatever error the failed refresh call produced. This matters because the refresh
+  endpoint's own error (say, <code>SESSION_REVOKED</code>) isn't what any calling code was ever written
+  to expect from, say, <code>getOrganization()</code>. Every existing catch site in the app already
+  knows how to handle "this request failed" - throwing the original error means none of them need to
+  change today, even though the reason it ultimately failed is new.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>Only ONE retry attempt per request - if the retried request fails again for any reason, that
+  second failure is what the caller sees. No retry loops, no exponential backoff.</li>
+  <li>No proactive/background refresh (e.g. a timer that refreshes a few minutes before the access
+  token would expire) - today's approach is purely reactive: wait for a 401, then refresh. Simpler, and
+  correct, at the cost of one extra round-trip the first time any token actually expires.</li>
+  <li>No user-visible "session expiring soon" warning - the whole point of this feature is that the
+  refresh is invisible when it succeeds. A future day could add a warning specifically for the case
+  where the REFRESH is about to fail (i.e., near the 30-day mark).</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> - no new packages today, this is just for consistency.</li>
+  <li>Run <code>pnpm dev</code>, log in, and open your browser's DevTools → Application → Cookies.</li>
+  <li>Manually delete just the access-token cookie (leave the refresh-token cookie alone) - this
+  simulates the access token having expired naturally.</li>
+  <li>Click around the app - notice nothing breaks or redirects to <code>/login</code>. Check the
+  Network tab: you should see one request 401, then a <code>POST /auth/refresh</code>, then the
+  original request repeated and succeeding.</li>
+  <li>Now delete BOTH cookies (simulating the full 30-day session being over) and click around again -
+  this time you should land on <code>/login</code>, same as before today.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every package (shared-types, validation, api, web) compiles with no TypeScript errors - clean on the first attempt, no fix-up round needed</td><td>✅ Confirmed</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) completes with no errors - 1,695 modules bundled successfully</td><td>✅ Confirmed</td></tr>
+  <tr><td>A custom logic test, mocking <code>global.fetch</code> directly against <code>lib/api.ts</code> (no browser, backend, or database needed): concurrent 401s across two different requests trigger exactly ONE shared refresh call</td><td>✅ Confirmed</td></tr>
+  <tr><td>Same test: a later, independent 401 correctly triggers its OWN fresh refresh call (dedup resets properly after the first round settles)</td><td>✅ Confirmed</td></tr>
+  <tr><td>Same test: when the refresh call itself fails, the ORIGINAL request's error message surfaces (not the refresh's), and the original endpoint is only ever called once - no infinite retry loop</td><td>✅ Confirmed, 3/3 phases passed</td></tr>
+  <tr><td>The real, end-to-end browser flow (deleting cookies in DevTools and confirming the network trace) against a real running database</td><td>⏳ Needs you to test it locally - same gap as the database in every prior day</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Days 14-15 remain open per the reconstructed schedule - permission deny-rules/overrides, true
+drag-and-drop reordering, and multi-organization invitations are the next-most-concretely-referenced
+unbuilt features. See <code>docs/PROJECT_HANDOFF.md</code> for the full, honestly-uncertain breakdown.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 13 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

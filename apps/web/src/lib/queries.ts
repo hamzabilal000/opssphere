@@ -64,9 +64,13 @@ export function useMeQuery() {
   return useQuery({
     queryKey: ["me"],
     queryFn: api.getMe,
-    // Don't automatically retry a failed "am I logged in" check - if it
-    // fails once, it's because there's no valid cookie, and retrying the
-    // exact same request won't change that.
+    // Still `false` as of Day 13, but for a slightly different reason now:
+    // api.getMe() already went through ONE silent refresh-and-retry inside
+    // lib/api.ts's withAutoRefresh before this queryFn ever resolves or
+    // rejects (see lib/api.ts). If it STILL failed, that means the refresh
+    // itself failed too - the refresh token is genuinely expired/revoked,
+    // not just the short-lived access token. TanStack Query retrying on
+    // top of that would just repeat the exact same doomed request.
     retry: false,
   });
 }
