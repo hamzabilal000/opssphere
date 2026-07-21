@@ -365,13 +365,24 @@ async function assertNoDependencyCycle(
 // MOVE TASK — the drag-and-drop endpoint, and the "server-validated status
 // transition" the Day 8 plan specifically calls for.
 // ----------------------------------------------------------------------------
+// DAY 14: `targetPosition` is optional and, when given, is the exact
+// 0-based slot the card should land in within the TARGET column - omit it
+// and this behaves exactly like Day 8 (append to the end). Two shapes are
+// handled separately below: reordering WITHIN the same column (a plain
+// "move array element from index i to index j" operation) and moving to a
+// DIFFERENT column (close the gap left behind, then open one at the
+// requested slot). Both use atomic Mongo `$inc` updates on just the
+// affected rows, rather than fetching and rewriting an entire column.
 export async function moveTask(
   organizationId: string,
   projectId: string,
   taskId: string,
-  newStatus: TaskStatus
+  newStatus: TaskStatus,
+  targetPosition?: number
 ): Promise<TaskSummary> {
   const task = await findTaskOrThrow(organizationId, projectId, taskId);
+  const oldStatus = task.status;
+  const oldPosition = task.position;
 
   // THE ACTUAL SERVER-SIDE RULE: a task can't be marked "done" while any
   // of its OWN subtasks are still open. The frontend never needs to know
@@ -405,13 +416,54 @@ export async function moveTask(
     }
   }
 
-  // Append to the end of the TARGET column - see task.model.ts's comment
-  // on `position` for why Day 8 doesn't support dropping into a precise
-  // slot and shifting every other card.
-  const position = await Task.countDocuments({ projectId, status: newStatus });
+  if (oldStatus === newStatus) {
+    // Reordering WITHIN the same column. `columnCount` includes this task
+    // itself (it's still sitting in this column, in the database, right
+    // now), so valid slots run 0..columnCount-1.
+    const columnCount = await Task.countDocuments({ projectId, status: newStatus });
+    const insertAt = Math.max(0, Math.min(targetPosition ?? oldPosition, columnCount - 1));
 
-  task.status = newStatus;
-  task.position = position;
+    if (insertAt > oldPosition) {
+      // Moving DOWN the column: everything strictly after the old slot,
+      // up to and including the new slot, shifts UP by one to close the
+      // gap this card is leaving behind it.
+      await Task.updateMany(
+        { projectId, status: newStatus, position: { $gt: oldPosition, $lte: insertAt } },
+        { $inc: { position: -1 } }
+      );
+    } else if (insertAt < oldPosition) {
+      // Moving UP the column: everything from the new slot up to (but not
+      // including) the old slot shifts DOWN by one to make room.
+      await Task.updateMany(
+        { projectId, status: newStatus, position: { $gte: insertAt, $lt: oldPosition } },
+        { $inc: { position: 1 } }
+      );
+    }
+    task.position = insertAt;
+  } else {
+    // Moving to a DIFFERENT column. First close the gap left behind in
+    // the OLD column (everything after this card's old slot shifts up).
+    await Task.updateMany(
+      { projectId, status: oldStatus, position: { $gt: oldPosition } },
+      { $inc: { position: -1 } }
+    );
+
+    // Then open a gap at the requested slot in the NEW column - falling
+    // back to "end of column" (Day 8's only option) if no targetPosition
+    // was given at all. `targetColumnCount` is safe to use as-is (not
+    // "+1"): the task isn't recorded under `newStatus` in the database
+    // yet, so it isn't part of this count.
+    const targetColumnCount = await Task.countDocuments({ projectId, status: newStatus });
+    const insertAt = Math.max(0, Math.min(targetPosition ?? targetColumnCount, targetColumnCount));
+    await Task.updateMany(
+      { projectId, status: newStatus, position: { $gte: insertAt } },
+      { $inc: { position: 1 } }
+    );
+
+    task.status = newStatus;
+    task.position = insertAt;
+  }
+
   await task.save();
 
   const [summary] = await toTaskSummaries([task]);

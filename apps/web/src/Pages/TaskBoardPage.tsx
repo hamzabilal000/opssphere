@@ -133,14 +133,22 @@ export default function TaskBoardPage() {
     }
   }
 
-  function handleDrop(status: TaskStatus, e: React.DragEvent) {
+  // DAY 14: `targetPosition` is the exact 0-based slot to land in within
+  // `status`'s column - dropping ON a card passes that card's own index
+  // ("land right before this one"), dropping on the column's empty space
+  // passes `columnTasks.length` ("land at the end," Day 8's only option,
+  // still the fallback the backend uses if this is ever omitted). Same
+  // function now handles BOTH cross-column moves and pure same-column
+  // reordering - Day 8's early "same column? do nothing" guard is gone.
+  function handleDrop(status: TaskStatus, targetPosition: number, e: React.DragEvent) {
     e.preventDefault();
+    e.stopPropagation();
     const taskId = e.dataTransfer.getData("text/plain");
     if (!taskId) return;
     const task = allTasks.find((t) => t.id === taskId);
-    if (!task || task.status === status) return;
+    if (!task) return;
     moveTaskMutation.mutate(
-      { taskId, status },
+      { taskId, status, targetPosition },
       {
         onError: (err) => toast((err as Error).message, "error"),
       }
@@ -165,7 +173,10 @@ export default function TaskBoardPage() {
               <Radio className="w-3 h-3" /> {liveConnected ? "Live" : "Offline"}
             </span>
           </div>
-          <p className="text-slate-500 text-sm">Drag a card between columns to change its status.</p>
+          <p className="text-slate-500 text-sm">
+            Drag a card between columns to change its status, or drop it on another card to reorder
+            within a column.
+          </p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -249,7 +260,7 @@ export default function TaskBoardPage() {
             <div
               key={column.status}
               onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => handleDrop(column.status, e)}
+              onDrop={(e) => handleDrop(column.status, columnTasks.length, e)}
               className="bg-slate-100 rounded-lg p-3 min-h-[300px]"
             >
               <div className="flex items-center justify-between mb-3">
@@ -258,13 +269,14 @@ export default function TaskBoardPage() {
               </div>
 
               <div className="space-y-2">
-                {columnTasks.map((task) => (
+                {columnTasks.map((task, index) => (
                   <TaskCard
                     key={task.id}
                     task={task}
                     allTasks={allTasks}
                     draggable={canManage}
                     onClick={() => setSelectedTaskId(task.id)}
+                    onDropBefore={(e) => handleDrop(column.status, index, e)}
                   />
                 ))}
                 {columnTasks.length === 0 && (
@@ -300,11 +312,17 @@ function TaskCard({
   allTasks,
   draggable,
   onClick,
+  onDropBefore,
 }: {
   task: TaskSummary;
   allTasks: TaskSummary[];
   draggable: boolean;
   onClick: () => void;
+  // DAY 14: a card is now ALSO a valid drop target, not just the column
+  // background - dropping directly on a card means "land right before
+  // this one," letting a card be reordered within its own column (or
+  // dropped at a precise slot in a different one), not just appended.
+  onDropBefore: (e: React.DragEvent) => void;
 }) {
   const subtaskCount = allTasks.filter((t) => t.parentTaskId === task.id).length;
 
@@ -312,6 +330,8 @@ function TaskCard({
     <button
       draggable={draggable}
       onDragStart={(e) => e.dataTransfer.setData("text/plain", task.id)}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={onDropBefore}
       onClick={onClick}
       className="w-full text-left bg-white border border-slate-200 rounded-md p-3 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
     >

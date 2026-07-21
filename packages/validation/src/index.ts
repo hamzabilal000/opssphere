@@ -321,6 +321,9 @@ export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 // the move route can't accidentally be used to sneak in a title change.
 export const moveTaskSchema = z.object({
   status: taskStatusSchema,
+  // DAY 14: optional - the exact 0-based slot to land in within the target
+  // column. Omitting it keeps Day 8's original behavior (append to the end).
+  targetPosition: z.number().int().min(0).optional(),
 });
 export type MoveTaskInput = z.infer<typeof moveTaskSchema>;
 

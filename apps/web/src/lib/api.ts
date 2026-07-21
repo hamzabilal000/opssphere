@@ -557,13 +557,21 @@ export function updateTask(
   return apiRequest(taskPath(organizationId, projectId, taskId), { method: "PATCH", body: input });
 }
 
+// DAY 14: `targetPosition` is optional - an exact 0-based slot within the
+// target column. Omit it to keep Day 8's original "append to the end"
+// behavior; the board now passes it whenever a card is dropped ON another
+// card (not just onto an empty column).
 export function moveTask(
   organizationId: string,
   projectId: string,
   taskId: string,
-  status: TaskStatus
+  status: TaskStatus,
+  targetPosition?: number
 ): Promise<{ task: TaskSummary }> {
-  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/move`, { method: "PATCH", body: { status } });
+  return apiRequest(`${taskPath(organizationId, projectId, taskId)}/move`, {
+    method: "PATCH",
+    body: { status, targetPosition },
+  });
 }
 
 export function deleteTask(organizationId: string, projectId: string, taskId: string): Promise<null> {

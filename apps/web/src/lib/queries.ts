@@ -446,8 +446,18 @@ export function useUpdateTaskMutation(organizationId: string, projectId: string)
 export function useMoveTaskMutation(organizationId: string, projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ taskId, status }: { taskId: string; status: TaskStatus }) =>
-      api.moveTask(organizationId, projectId, taskId, status),
+    // DAY 14: targetPosition is optional, passed through unchanged to
+    // api.moveTask - see TaskBoardPage.tsx's handleDrop for how the board
+    // computes it from where a card was actually dropped.
+    mutationFn: ({
+      taskId,
+      status,
+      targetPosition,
+    }: {
+      taskId: string;
+      status: TaskStatus;
+      targetPosition?: number;
+    }) => api.moveTask(organizationId, projectId, taskId, status, targetPosition),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "projects", projectId, "tasks"] }),
   });

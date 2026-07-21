@@ -57,7 +57,7 @@ that reconstruction as a best-effort placeholder, not a confirmed spec, and say 
 
 ---
 
-## 3. Repository structure (as of Day 13)
+## 3. Repository structure (as of Day 14)
 
 ```
 OpsSphere/
@@ -78,7 +78,9 @@ OpsSphere/
 │   │       │   │                    service/controller/routes  (Day 8, extended Day 9 with comment
 │   │       │   │                    edit/delete, @mentions, and socket event emission; extended Day
 │   │       │   │                    11 with dependsOnTaskIds + embedded checklistItems on Task;
-│   │       │   │                    extended Day 12 — TaskAttachment now supports real uploads too)
+│   │       │   │                    extended Day 12 — TaskAttachment now supports real uploads too;
+│   │       │   │                    extended Day 14 — moveTask can insert at an exact column
+│   │       │   │                    slot, not just append to the end)
 │   │       │   ├── tickets/         ticket, ticket-comment models + service/controller/routes
 │   │       │   │                    (Day 10, ORG-level, not under a project)
 │   │       │   ├── risks/           risk model + service/controller/routes (Day 11 -
@@ -115,7 +117,7 @@ OpsSphere/
 │   ├── eslint-config/                Shared lint rules
 │   └── tsconfig/                     Shared base tsconfig
 ├── docs/
-│   ├── learning-notes/               01 through 13 (HTML, styled, one per completed day)
+│   ├── learning-notes/               01 through 14 (HTML, styled, one per completed day)
 │   └── PROJECT_HANDOFF.md            This file — keep it updated after every day (see §9)
 ├── docker-compose.yml               MongoDB, Valkey, Mailpit, MinIO
 └── README.md                        Currently STALE — still says "Day 1 of 18", update this
@@ -237,6 +239,25 @@ make the codebase feel inconsistent and will likely surprise whoever reads it ne
 - This was a rare **frontend-only day** — `POST /auth/refresh` has worked correctly since Day 3; the
   gap was only that nothing ever called it automatically. Don't assume every day needs a backend
   change; check whether the backend already does the right thing before touching it.
+
+**Position-based ordering / reordering (Day 14 onward):**
+- Any `position` field used for ordering cards/rows within a group (Day 8's `Task.position` within
+  its status column is the only example so far) is expected to be kept a CONTIGUOUS 0..N-1 sequence
+  per group at all times — no gaps, ever. Day 8's original "append to the end" logic already
+  maintained this by accident; Day 14's true reordering logic actively DEPENDS on it being true, so
+  don't write any new code path that could leave a gap (e.g. deleting a row without renumbering
+  what's after it) without renumbering the group afterward.
+- **Reordering within one group vs. moving between two groups are different math, even though they
+  look like the same feature.** Same-group reordering shifts only whatever sits strictly between the
+  old and new slot (one direction, via `$gt`/`$lte` or `$gte`/`$lt` + `$inc`). Moving between groups is
+  two independent half-steps: close the gap in the OLD group, then open a gap at the target slot in
+  the NEW group. `task.service.ts`'s `moveTask` branches on `oldStatus === newStatus` right at the
+  top for exactly this reason — reuse that same branch shape for any future "move this into a
+  specific slot, possibly in a different bucket" feature (e.g. checklist item reordering).
+- **Two targeted `$inc` range updates, not a fetch-everything-and-rewrite loop.** Because the
+  contiguous-positions invariant above holds, only the affected range ever needs to move — this is
+  what keeps a reorder to a couple of small `updateMany` calls instead of one write per row in the
+  group.
 
 **Real-time (Day 9 onward):**
 - `apps/api/src/lib/socket.ts` holds the ONE Socket.IO server instance (module-level variable,
@@ -487,7 +508,7 @@ same "any active member, no permission gate" rule as Day 8's link attachments. F
 `TaskDetailModal.tsx` gained a file-upload control that shows both kinds of attachment in one
 identical-looking list.
 
-### ✅ Day 13 — Automatic Access-Token Refresh (most recently completed)
+### ✅ Day 13 — Automatic Access-Token Refresh
 A rare **frontend-only day** — `POST /auth/refresh` has worked correctly since Day 3; the gap was
 only that nothing ever called it automatically, so in practice users got logged out every 15
 minutes regardless of their 30-day refresh token. `lib/api.ts`'s two funnel functions
@@ -505,19 +526,36 @@ independent re-refresh, original-error-surfaces-with-no-retry-loop) pass.
 
 ---
 
-### ⚠️ Days 14-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
+### ✅ Day 14 — True Drag-and-Drop Reordering (most recently completed)
+Day 8's `position` field only ever supported "append to the end of whichever column a card lands
+in" — dropping a card back among cards that were already there wasn't possible. `task.service.ts`'s
+`moveTask` gained an optional `targetPosition` (the exact 0-based slot to land in), and now branches
+on whether the move is WITHIN the same column (a classic "move array element from index i to index
+j" operation — shift whatever sits strictly between the old and new slot by one) or ACROSS two
+different columns (close the gap left in the old column, then open one at the target slot in the
+new column). Both cases use a couple of targeted MongoDB `updateMany`/`$inc` range updates rather
+than fetching and rewriting the whole column — cheap specifically because positions are always kept
+a contiguous 0..N-1 sequence per column, an invariant every prior day already maintained without
+anyone naming it until now (see the new §4 convention block). No new model, permission, or route —
+the existing `PATCH .../move` endpoint just accepts one new optional field. Frontend:
+`TaskBoardPage.tsx`'s `TaskCard` is now itself a valid drop target (dropping ON a card means "land
+right before this one"), not just the column background; Day 8's "same column? do nothing early
+return" guard is gone. Verified with a standalone position-math simulation checked against plain
+array-splice as the reference answer across all 25 (oldIndex, targetIndex) pairs for a 5-card
+column, plus dedicated cross-column and fallback cases — all passed.
+
+---
+
+### ⚠️ Days 15-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
 
 The schedule and build-guide PDFs referenced by the README are **not present in this repo**. What
-follows for Days 14-18 is reconstructed **only** from forward-looking comments already written into
-the Day 1-13 code and learning notes. Treat the day numbers below with **decreasing confidence** the
-further you go — Days 14-15 are educated guesses about ordering; Day 18 has zero hints anywhere.
+follows for Days 15-18 is reconstructed **only** from forward-looking comments already written into
+the Day 1-14 code and learning notes. Treat the day numbers below with **decreasing confidence** the
+further you go — Day 15 is an educated guess about ordering; Day 18 has zero hints anywhere.
 
-**Days 14-15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
+**Day 15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
 - **Permission model enhancements** — deny-rules or overrides on top of the flat allow-list (Day 5
   explicitly scoped these out, calling them a possible future addition, no day given).
-- **Drag-and-drop true reordering** — Day 8's `position` field only supports append-to-end; true
-  "insert at this exact slot and shift everything else" is called out as "a reasonable future
-  upgrade," no day given.
 - **Multi-organization invitations** — inviting an email that already has an OpsSphere account into
   a second org isn't supported yet (Day 5 explicitly rejects this case with an error).
 
@@ -601,10 +639,10 @@ loops).** Never claim more confidence than what was actually run.
 
 ## 8. Current state / how to resume
 
-- Git: as of Day 13, the working tree has the Day 13 changes (plus Day 12 and the post-Day-11
+- Git: as of Day 14, the working tree has the Day 14 changes (plus Days 12-13 and the post-Day-11
   role-permission-editing fix) staged but **not yet committed** (the user has not asked for an
   automatic push since Day 7 — check `git log` and `git status` first before assuming anything
-  about what's actually committed; don't assume Days 8-13 are pushed just because Day 7 was).
+  about what's actually committed; don't assume Days 8-14 are pushed just because Day 7 was).
 - Real local testing of Day 12 needs the user's own Docker MinIO container actually running
   (`docker compose up -d minio`, console at `localhost:9001`) - this sandbox has never had one
   available, same gap as the database in every prior day.
@@ -612,6 +650,9 @@ loops).** Never claim more confidence than what was actually run.
   the access-token cookie in DevTools, confirm the network trace shows a silent refresh-and-retry)
   — this sandbox verified the retry LOGIC directly (mocked fetch), not the real end-to-end cookie
   flow.
+- Real local testing of Day 14 needs a real browser session dragging real cards against a real
+  running MongoDB — this sandbox verified the position-math LOGIC directly (a standalone simulation
+  checked against array-splice), not the real drag-and-drop-against-a-database experience.
 - The README.md's "Status" line is stale (still says "Day 1 of 18") — worth fixing whenever
   convenient, it's a one-line change.
 - No `.env` file is assumed to exist in this sandbox — real local development (`pnpm dev` against
@@ -656,6 +697,6 @@ this file is a MAP for another AI picking up the project cold, not the whole ter
 ---
 
 **Bottom line for whoever picks this up next**: follow §5's rhythm exactly (including this file's
-own update step, §9), respect the conventions in §4 (they're consistent across 12,500+ lines of
+own update step, §9), respect the conventions in §4 (they're consistent across 13,000+ lines of
 code so far — don't introduce a different style), verify using §7's methodology, and be honest
-about the Day 14-18 uncertainty in §6 until you can get your hands on the real schedule PDF.
+about the Day 15-18 uncertainty in §6 until you can get your hands on the real schedule PDF.

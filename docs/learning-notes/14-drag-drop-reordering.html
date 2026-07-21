@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 14 — True Drag-and-Drop Reordering</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 14 OF 18</div>
+  <h1>True Drag-and-Drop Reordering</h1>
+  <p class="sub">Since Day 8, dropping a card anywhere in a column always sent it to the very end of
+  that column - dropping it back among cards that were already there just wasn't possible. Today makes
+  the board do what it always looked like it could do: land a card in the EXACT spot you dropped it.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Every task's <code>position</code> field has tracked its spot in its status column since Day 8 - but
+the only thing that ever wrote to it was "count how many cards are already here, put the new one after
+all of them." Today's whole job is teaching <code>moveTask</code> a second trick: given an exact target
+slot, shift only the cards that actually need to move, and land the dragged card precisely there -
+whether that's a different spot in the SAME column, or an exact slot in a DIFFERENT one. No new model,
+no new permission, no new route - the same <code>PATCH .../move</code> endpoint from Day 8 just accepts
+one new optional field.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every changed file has comments explaining what's new - especially <code>task.service.ts</code>'s
+  <code>moveTask</code>, which is where basically all of today's real thinking happened.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. Moving one card is really "shift a range, not rewrite everything"</h3>
+<p>The naive way to reorder a column would be to fetch every task in it, rebuild the whole array in
+memory, and write every position back. Today does something narrower: since positions are always kept
+as a contiguous 0..N-1 sequence per column (an invariant every prior day already maintained without
+realizing it), moving a card from slot 2 to slot 4 only actually changes the cards that were SITTING
+between those two slots - everything else keeps its position untouched. That's two plain MongoDB
+<code>updateMany</code> calls with a <code>$gt</code>/<code>$lte</code> (or <code>$gte</code>/<code>$lt</code>)
+range and a <code>$inc</code>, not a loop over every task in the column.</p>
+
+<h3>2. Same column vs. different column are genuinely different problems</h3>
+<p>Reordering WITHIN one column is a classic "move an array element from index i to index j" operation -
+everything strictly between the old and new slot shifts by exactly one, in whichever direction closes
+the gap. Moving to a DIFFERENT column is two separate half-problems stacked back to back: close the gap
+left behind in the OLD column (everything after the old slot shifts up by one), then open a gap at the
+requested slot in the NEW column (everything from that slot onward shifts down by one). <code>moveTask</code>
+branches on <code>oldStatus === newStatus</code> right at the top specifically because these aren't the
+same math, even though they look like one feature from the board's point of view.</p>
+
+<h3>3. A card is now a valid drop target, not just the column background</h3>
+<p>Day 8's board only listened for a drop on the empty column <code>&lt;div&gt;</code> itself - fine
+when "drop anywhere in this column" always meant the same thing (the end). Today, each individual
+<code>TaskCard</code> button also has its own <code>onDragOver</code>/<code>onDrop</code> handlers:
+dropping directly ON a card means "land right before this one." The column's own drop handler still
+exists for the empty space below the last card (or an empty column entirely) and means "land at the
+end" - Day 8's only behavior, now just one of two ways to trigger a move instead of the only one.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext">Someone picks up a card in "In Progress" and drags it directly over a DIFFERENT card sitting two slots below it, in the same column.</div></div>
+<div class="step"><div class="num">2</div><div class="stext">Dropping there fires that target card's <code>onDropBefore</code> handler, which calls <code>handleDrop("in_progress", <i>targetCard's index</i>, e)</code> - the same column, a specific slot.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><code>moveTask</code> sees <code>oldStatus === newStatus</code>, computes <code>insertAt</code> (clamped to a valid slot), and shifts only the cards strictly between the old and new position by one each via a single <code>updateMany</code>.</div></div>
+<div class="step"><div class="num">4</div><div class="stext">The dragged task's own <code>position</code> is set to <code>insertAt</code> and saved - one document write for the moved card, one batched range-update for everyone it displaced.</div></div>
+<div class="step"><div class="num">5</div><div class="stext">Day 9's existing live-update wiring picks this up automatically - <code>TASK_MOVED</code> already invalidates the board's task list on every connected browser, no new socket code needed for today's feature at all.</div></div>
+<div class="step"><div class="num">6</div><div class="stext">Dragging a card to a DIFFERENT column and dropping it ON a specific card there works the same way, just taking the "moving to a different column" branch instead - close the old column's gap, open the new column's gap at that exact slot.</div></div>
+
+<h2>The new/changed files, in one picture</h2>
+<pre><code>packages/validation/src/index.ts   <span style="color:#7be9d8">→ moveTaskSchema + optional targetPosition</span>
+
+apps/api/src/modules/tasks/
+├── task.model.ts        <span style="color:#7be9d8">→ comment only - position's Day 8 limitation is now Day 14's fix</span>
+├── task.service.ts        <span style="color:#7be9d8">→ moveTask rewritten - same-column vs. cross-column branches</span>
+└── task.controller.ts       <span style="color:#7be9d8">→ passes targetPosition through to the service, unchanged shape otherwise</span>
+
+apps/web/src/
+├── lib/api.ts             <span style="color:#7be9d8">→ moveTask() takes an optional targetPosition</span>
+├── lib/queries.ts           <span style="color:#7be9d8">→ useMoveTaskMutation passes it through</span>
+└── Pages/TaskBoardPage.tsx     <span style="color:#7be9d8">→ cards are now drop targets too (onDropBefore); Day 8's "same column? do nothing" guard is gone</span></code></pre>
+
+<h2>A design detail worth understanding: why two <code>$inc</code> calls instead of a loop</h2>
+<div class="callout amber">
+  <strong class="title">The contiguous-positions invariant is what makes this cheap</strong>
+  This whole approach only works because every prior day (accidentally) kept column positions as a
+  clean 0..N-1 sequence with no gaps - Day 8's original "append to the end" logic already guaranteed
+  that. Because that invariant holds, moving one card only ever requires shifting the cards STRICTLY
+  BETWEEN its old and new slot - never anything outside that range, and never anything in a column the
+  card isn't touching. That's what turns "reorder a column" from an O(N) rewrite into two small,
+  targeted range updates. If some future feature ever let positions drift out of that clean sequence
+  (say, a bulk-import that assigns arbitrary numbers), this logic would need a "renumber the column
+  first" step before it could trust the shortcut again.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>No visual "drop indicator line" showing exactly where a card will land mid-drag - the cursor
+  just shows the normal browser drag affordance. A polish-phase (Day 17) addition, not required to
+  prove the underlying reorder logic works.</li>
+  <li>Dropping a card directly on itself is a harmless no-op API call (its computed target slot equals
+  its own current slot) rather than being specially detected and skipped client-side - simpler code,
+  no visible difference to the user.</li>
+  <li>No keyboard-accessible way to reorder cards (arrow keys, a context menu) - HTML5 drag-and-drop
+  remains mouse-only, same limitation Day 8 already had. Day 16 "Hardening" is the natural home for
+  an accessible alternative.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> - no new packages today.</li>
+  <li>Run <code>pnpm dev</code>, open a project's board with at least 3-4 tasks in one column.</li>
+  <li>Drag a card from the bottom of a column and drop it directly ON a card near the top - confirm it
+  lands exactly there, and everything in between shifts down by one slot, not just to the end.</li>
+  <li>Drag a card into a DIFFERENT column and drop it on a specific card there (not the empty space
+  below) - confirm it lands at that exact slot in the new column too.</li>
+  <li>Open the same board in a second browser tab and confirm the reorder shows up there too, live,
+  via Day 9's existing socket wiring - no new code path for that.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every package (shared-types, validation, api, web) compiles with no TypeScript errors - clean on the first attempt, no fix-up round needed</td><td>✅ Confirmed</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) completes with no errors - 1,695 modules bundled successfully</td><td>✅ Confirmed</td></tr>
+  <tr><td>The <code>/move</code> route still requires auth and a bogus route still 404s, with the new <code>targetPosition</code> field present in the request body</td><td>✅ Confirmed</td></tr>
+  <tr><td>A standalone position-math simulation checked the SAME range logic used in <code>moveTask</code> (same-column shifts, cross-column gap-close-then-open, and out-of-range clamping) against plain array-splice as the reference answer, across all 25 (oldIndex, targetIndex) pairs for a 5-card column plus dedicated cross-column and fallback cases</td><td>✅ Confirmed, all phases passed</td></tr>
+  <tr><td>The actual browser drag-and-drop experience, and confirming positions update correctly against a real running MongoDB</td><td>⏳ Needs you to test it locally - same gap as the database in every prior day</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Day 15 remains open per the reconstructed schedule - permission deny-rules/overrides and
+multi-organization invitations are the next-most-concretely-referenced unbuilt features. See
+<code>docs/PROJECT_HANDOFF.md</code> for the full, honestly-uncertain breakdown.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 14 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

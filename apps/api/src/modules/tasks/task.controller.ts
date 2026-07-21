@@ -186,7 +186,8 @@ export async function moveTaskHandler(req: Request, res: Response) {
     req.organizationId ?? "",
     String(req.params.projectId ?? ""),
     String(req.params.taskId ?? ""),
-    parsed.data.status
+    parsed.data.status,
+    parsed.data.targetPosition
   );
 
   // This is the headline Day 9 moment: someone drags a card, and every

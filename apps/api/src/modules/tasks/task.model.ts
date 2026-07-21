@@ -11,11 +11,11 @@
 //     task gets for free (their own status, assignees, comments, ...).
 //
 //   - `position` (a plain number): where this card sits within its OWN
-//     status column on the board, low-to-high. See task.service.ts's
-//     moveTask for exactly how this gets maintained - Day 8 keeps this
-//     intentionally simple (append to the end of whichever column a card
-//     is dropped into, not "insert at this exact slot and shift
-//     everything else").
+//     status column on the board, low-to-high, always a contiguous 0..N-1
+//     per column (Day 8 kept this "append to the end" only; DAY 14's
+//     moveTask can now insert at an exact slot too, shifting every other
+//     affected task's position via a couple of atomic `$inc` updates
+//     rather than rewriting the whole column - see task.service.ts).
 //
 //   - `dependsOnTaskIds` (DAY 11): other tasks in the SAME project that
 //     must be "done" before this one can be marked "done" - see
