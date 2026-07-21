@@ -413,14 +413,19 @@ export interface TaskCommentSummary {
   isEdited: boolean;
 }
 
-/** DAY 8 keeps this to a LINK, not a real uploaded file - see the Day 8
- * learning note for why (real file storage via MinIO is a reasonable
- * future upgrade, not something this environment can build AND verify in
- * one day). */
+/** DAY 8 kept this to a LINK only; DAY 12 added real uploads (see
+ * task-attachment.model.ts). `url` is ALWAYS present here regardless of
+ * which kind this is - for an upload, the backend generates a fresh,
+ * short-lived signed MinIO URL every time this is resolved (see
+ * task.service.ts's toAttachmentSummary), so the frontend never has to
+ * know or care which kind of attachment it's looking at. `mimeType`/
+ * `sizeBytes` are only present for uploads. */
 export interface TaskAttachmentSummary {
   id: string;
   name: string;
   url: string;
+  mimeType?: string;
+  sizeBytes?: number;
   uploadedBy: string;
   uploadedByEmail: string;
   createdAt: string;

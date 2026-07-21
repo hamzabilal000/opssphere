@@ -18,6 +18,7 @@ import { logger } from "./lib/logger.js";
 import { connectDatabase } from "./lib/db.js";
 import { createApp } from "./app.js";
 import { initSocketServer } from "./lib/socket.js";
+import { ensureBucketExists } from "./lib/storage.js";
 
 // TYPESCRIPT NOTE: `async function main() { ... }`
 // Nothing TypeScript-specific here — this is exactly the async/await
@@ -27,6 +28,12 @@ async function main() {
   // Step 1: connect to MongoDB. `await` pauses here until it either
   // succeeds or throws an error.
   await connectDatabase();
+
+  // DAY 12: make sure our MinIO bucket exists before accepting any
+  // requests - see lib/storage.ts for why this doesn't crash the server
+  // the way a bad Mongo URI would (file uploads are one feature, not the
+  // whole app).
+  await ensureBucketExists();
 
   // Step 2: build the Express app (see app.ts) — routes, middleware, etc.
   const app = createApp();

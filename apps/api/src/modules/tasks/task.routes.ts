@@ -23,6 +23,7 @@
 // ============================================================================
 
 import { Router } from "express";
+import multer from "multer";
 import {
   listSprintsHandler,
   createSprintHandler,
@@ -39,6 +40,7 @@ import {
   deleteCommentHandler,
   listAttachmentsHandler,
   createAttachmentHandler,
+  uploadAttachmentHandler,
   deleteAttachmentHandler,
   listTimeEntriesHandler,
   createTimeEntryHandler,
@@ -52,6 +54,15 @@ import { requireOrgMembership, requirePermission } from "../organizations/tenant
 import { PERMISSIONS } from "@opssphere/shared-types";
 
 export const taskRouter = Router();
+
+// DAY 12: `multer.memoryStorage()` keeps an uploaded file's bytes in RAM
+// (as a plain Buffer, handed to us via req.file.buffer) instead of writing
+// it to a temp file on the API server's own disk - the file's real,
+// permanent home is MinIO, so there's no reason for it to ever touch this
+// server's filesystem at all. `limits.fileSize` is a deliberately small
+// default (10 MB) for a demo/teaching project, not an exhaustively
+// configurable setting.
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
 const base = "/:organizationId/projects/:projectId";
 
@@ -131,6 +142,18 @@ taskRouter.delete(
 // checked inside the controller/service, not here) -------------------------
 taskRouter.get(`${base}/tasks/:taskId/attachments`, requireAuth, requireOrgMembership, listAttachmentsHandler);
 taskRouter.post(`${base}/tasks/:taskId/attachments`, requireAuth, requireOrgMembership, createAttachmentHandler);
+// DAY 12: the REAL-file counterpart to the link-based route right above -
+// same permission split (any active member), same base path, one extra
+// path segment. `upload.single("file")` runs AFTER requireOrgMembership on
+// purpose - an unauthenticated/non-member request gets rejected before we
+// ever spend effort parsing a (potentially large) file body.
+taskRouter.post(
+  `${base}/tasks/:taskId/attachments/upload`,
+  requireAuth,
+  requireOrgMembership,
+  upload.single("file"),
+  uploadAttachmentHandler
+);
 taskRouter.delete(
   `${base}/tasks/:taskId/attachments/:attachmentId`,
   requireAuth,

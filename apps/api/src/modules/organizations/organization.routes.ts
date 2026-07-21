@@ -18,6 +18,7 @@ import {
   updateMemberRoleHandler,
   listRolesHandler,
   createRoleHandler,
+  updateRoleHandler,
   deleteRoleHandler,
   listDepartmentsHandler,
   createDepartmentHandler,
@@ -71,6 +72,13 @@ organizationRouter.post(
   requireOrgMembership,
   requirePermission(PERMISSIONS.ROLE_MANAGE),
   createRoleHandler
+);
+organizationRouter.patch(
+  "/:organizationId/roles/:roleId",
+  requireAuth,
+  requireOrgMembership,
+  requirePermission(PERMISSIONS.ROLE_MANAGE),
+  updateRoleHandler
 );
 organizationRouter.delete(
   "/:organizationId/roles/:roleId",

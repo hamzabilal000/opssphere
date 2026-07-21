@@ -24,7 +24,7 @@ currently present in the repo** — see §7 for what this means for you):
 - `OpsSphere_18_Day_Build_Schedule.pdf` — the day-by-day build plan.
 
 If you don't have these PDFs, §6 of this document reconstructs everything currently knowable about
-Days 12-18 from forward-looking hints already embedded in code comments and learning notes — treat
+Days 13-18 from forward-looking hints already embedded in code comments and learning notes — treat
 that reconstruction as a best-effort placeholder, not a confirmed spec, and say so if you use it.
 
 ---
@@ -36,22 +36,28 @@ that reconstruction as a best-effort placeholder, not a confirmed spec, and say 
 - **Backend**: Express 5, Mongoose 8, TypeScript strict mode + `noUncheckedIndexedAccess`, Zod for
   validation, `bcryptjs` for password hashing, `jsonwebtoken` for JWTs, `nodemailer` (→ Mailpit
   locally) for email, `pino`/`pino-http` for logging, `helmet` + `cors` + `cookie-parser`,
-  **`socket.io` + `cookie` (Day 9, real-time)**.
+  **`socket.io` + `cookie` (Day 9, real-time)**, **`@aws-sdk/client-s3` + `@aws-sdk/s3-request-
+  presigner` + `multer` (Day 12, real file storage — see lib/storage.ts)**.
 - **Frontend**: React + Vite, React Router v6 (nested routes), TanStack Query (server state),
   Zustand (local UI state, persisted to localStorage), Tailwind CSS, `lucide-react` icons, hand-
   built shadcn/ui-style components (the real shadcn CLI can't run in this environment),
   **`socket.io-client` (Day 9)**.
 - **Infrastructure** (`docker-compose.yml`): MongoDB, Valkey/Redis, Mailpit (fake SMTP inbox, UI at
-  `localhost:8025`), MinIO (S3-compatible object storage). **Valkey and MinIO are STILL provisioned
-  but UNUSED by any code as of Day 9** — Day 9 could have used Valkey for cross-instance Socket.IO
-  pub/sub but didn't need to (a single server instance's built-in in-memory adapter is enough for
-  now; wiring up the Redis/Valkey adapter is a reasonable upgrade if this ever runs on more than one
-  server instance at once). MinIO is still waiting for a real file-upload day (see §6).
+  `localhost:8025`), MinIO (S3-compatible object storage, console UI at `localhost:9001`, login
+  `opssphere`/`opssphere123`). **Valkey is STILL provisioned but UNUSED by any code** — Day 9 could
+  have used it for cross-instance Socket.IO pub/sub but didn't need to (a single server instance's
+  built-in in-memory adapter is enough for now; wiring up the Redis/Valkey adapter is a reasonable
+  upgrade if this ever runs on more than one server instance at once). **MinIO went from provisioned-
+  but-unused to actually wired up on Day 12** (see §6) — its five env vars (`MINIO_ENDPOINT`,
+  `MINIO_PORT`, `MINIO_BUCKET`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`) had existed in `.env`/
+  `.env.example` since Day 1 but were silently ignored by `config/env.ts`'s Zod schema until Day 12
+  actually added them to it — worth remembering if you ever wonder why an env var in `.env` doesn't
+  seem to be doing anything: check whether `env.ts`'s schema actually asks for it.
 - **Ports**: API `localhost:4000` (health check `/api/v1/health/live`), Web `localhost:5173`.
 
 ---
 
-## 3. Repository structure (as of Day 11)
+## 3. Repository structure (as of Day 12)
 
 ```
 OpsSphere/
@@ -60,7 +66,8 @@ OpsSphere/
 │   │   └── src/
 │   │       ├── config/env.ts        Zod-validated environment config, fails fast on boot
 │   │       ├── lib/                 db.ts, logger.ts, password.ts, mailer.ts,
-│   │       │                        socket.ts (Day 9 — Socket.IO server, auth, rooms)
+│   │       │                        socket.ts (Day 9 — Socket.IO server, auth, rooms),
+│   │       │                        storage.ts (Day 12 — MinIO client, signed URLs)
 │   │       ├── middleware/errorHandler.ts   ApiError class, errorHandler, notFoundHandler
 │   │       ├── modules/
 │   │       │   ├── auth/            user, session, invitation models + auth service/controller/routes
@@ -70,10 +77,11 @@ OpsSphere/
 │   │       │   ├── tasks/           sprint, task, task-comment, task-attachment, time-entry models +
 │   │       │   │                    service/controller/routes  (Day 8, extended Day 9 with comment
 │   │       │   │                    edit/delete, @mentions, and socket event emission; extended Day
-│   │       │   │                    11 with dependsOnTaskIds + embedded checklistItems on Task)
+│   │       │   │                    11 with dependsOnTaskIds + embedded checklistItems on Task;
+│   │       │   │                    extended Day 12 — TaskAttachment now supports real uploads too)
 │   │       │   ├── tickets/         ticket, ticket-comment models + service/controller/routes
 │   │       │   │                    (Day 10, ORG-level, not under a project)
-│   │       │   ├── risks/           risk model + service/controller/routes (Day 11, newest module -
+│   │       │   ├── risks/           risk model + service/controller/routes (Day 11 -
 │   │       │   │                    PROJECT-level, unlike tickets - see risk.model.ts)
 │   │       │   └── health/          health.routes.ts
 │   │       ├── app.ts                createApp() — assembles Express app, mounts every router
@@ -87,7 +95,8 @@ OpsSphere/
 │           │   ├── shell/            ProtectedRoute, AppShell, Sidebar, Topbar
 │           │   └── tasks/            TaskDetailModal (Day 8, extended Day 9 with comment edit/
 │           │                         delete + mention highlighting; extended Day 11 with
-│           │                         Dependencies + Checklist sections)
+│           │                         Dependencies + Checklist sections; extended Day 12 with a
+│           │                         real file-upload control alongside the link-attachment form)
 │           ├── Pages/                One file per route (RegisterPage, LoginPage, OverviewPage,
 │           │                         OrganizationDetailPage, ProjectsListPage, ProjectDetailPage,
 │           │                         TaskBoardPage, TicketsListPage, TicketDetailPage,
@@ -104,7 +113,7 @@ OpsSphere/
 │   ├── eslint-config/                Shared lint rules
 │   └── tsconfig/                     Shared base tsconfig
 ├── docs/
-│   ├── learning-notes/               01 through 11 (HTML, styled, one per completed day)
+│   ├── learning-notes/               01 through 12 (HTML, styled, one per completed day)
 │   └── PROJECT_HANDOFF.md            This file — keep it updated after every day (see §9)
 ├── docker-compose.yml               MongoDB, Valkey, Mailpit, MinIO
 └── README.md                        Currently STALE — still says "Day 1 of 18", update this
@@ -182,6 +191,27 @@ make the codebase feel inconsistent and will likely surprise whoever reads it ne
   itself indirectly. If a future day adds another self-referential "this points at another one of
   its own kind" relationship, this is the pattern to reuse (BFS with a `visited` set, checked
   BEFORE the write, not after).
+
+**File storage (Day 12 onward):**
+- `apps/api/src/lib/storage.ts` holds the ONE MinIO/S3-compatible client instance — same "one shared
+  instance, imported where needed" idea as `lib/logger.ts`'s `logger` and `lib/socket.ts`'s `io`.
+  Other files never build their own client — they call the exported helpers
+  (`uploadFileToStorage`/`deleteFileFromStorage`/`getSignedDownloadUrl`).
+- **Files are never streamed through our own Express server on the way OUT.** A short-lived (15
+  minute) presigned URL is generated fresh every time an uploaded file is listed, and the browser
+  downloads directly from MinIO. If a future day adds another kind of file (avatars, org logos,
+  ...), reuse this same presigned-URL pattern rather than building a `GET .../raw` streaming route.
+- **Match a startup check's failure severity to its actual blast radius.** `config/env.ts` crashes
+  the whole server (`process.exit(1)`) if auth secrets are missing, because NOTHING works without
+  them. `lib/storage.ts`'s `ensureBucketExists()` deliberately does NOT crash the server if MinIO is
+  unreachable — it logs a warning and lets everything else keep working, since file uploads are one
+  feature among many. Don't reflexively copy the "fail fast and hard" pattern for every new
+  integration; ask what actually breaks if this one thing is down.
+- **A schema without `.strict()` silently ignores env vars it doesn't ask for.** `.env`/
+  `.env.example` had MinIO's 5 env vars sitting in them since Day 1, doing NOTHING, because
+  `config/env.ts`'s Zod schema never listed them — a real, live example of this gotcha, not a
+  hypothetical one. If an env var seems to have no effect, check whether `env.ts` actually validates
+  it before assuming the value itself is wrong.
 
 **Real-time (Day 9 onward):**
 - `apps/api/src/lib/socket.ts` holds the ONE Socket.IO server instance (module-level variable,
@@ -378,7 +408,7 @@ live updates) — reusing Day 9's richer machinery here is a disclosed future up
 job. Frontend: `TicketsListPage.tsx` (status/"only mine" filters, a file-a-ticket form with no
 `canManage` gate) + `TicketDetailPage.tsx`, plus a new "Tickets" sidebar link.
 
-### ✅ Day 11 — Task Dependencies, Checklists & Risk Register (most recently completed)
+### ✅ Day 11 — Task Dependencies, Checklists & Risk Register
 The three features the Day 8 comments explicitly deferred ("should have, not today's job"). Two
 live as new fields directly ON `Task` — `dependsOnTaskIds` (other tasks in the same project that
 must be "done" first; `task.service.ts`'s `assertNoDependencyCycle` walks the dependency graph
@@ -397,19 +427,51 @@ picks it up with zero new frontend socket code. Frontend: `TaskDetailModal.tsx` 
 Dependencies (toggleable chips + a "Blocked" badge) and Checklist sections; a new
 `RiskRegisterPage.tsx` is linked from `ProjectDetailPage.tsx`'s header, next to "Board."
 
+### 🔧 Post-Day-11 fix — Role permission editing (not a numbered day, but real, shipped work)
+A real usability bug surfaced while using the app: `createOrganization` (Day 5) snapshots
+`ALL_PERMISSIONS` into a new org's "Owner" role ONCE, at creation time — it's a copy, not a live
+reference. Every later day that added a new permission string (`task.manage` on Day 8,
+`ticket.assign` on Day 10, `risk.manage` on Day 11) never retroactively added it to
+ALREADY-EXISTING roles. An org created early in this project's life ends up with an Owner role
+permanently missing newer permissions — and until now there was no way to fix that except a direct
+database edit, since `organization.service.ts` only ever had `createRole`/`deleteRole`, no
+`updateRole`. Added: `updateRoleSchema` (validation), `updateRole` (service — deliberately allowed
+to edit a SYSTEM role's `permissions`, unlike `deleteRole` which still blocks system roles outright;
+renaming a system role is still blocked), `PATCH /organizations/:organizationId/roles/:roleId`
+(route, same `role.manage` permission gate as create/delete), and a frontend inline-edit UI on
+`OrganizationDetailPage.tsx`'s Roles card (an "Edit" pencil next to every role, including Owner/
+Member, with a "Select all" shortcut). **New convention worth knowing**: system roles (Owner/
+Member) can now have their PERMISSIONS edited through the app, just not their NAME — if a future
+day adds another permission to the catalog, this is now the intended way for an existing org to pick
+it up, instead of needing a database migration.
+
+### ✅ Day 12 — Real File Storage (most recently completed)
+Wired up the MinIO service that had been sitting in `docker-compose.yml`, completely unused, since
+Day 1 — including discovering its 5 env vars (`MINIO_ENDPOINT`/`MINIO_PORT`/`MINIO_BUCKET`/
+`MINIO_ACCESS_KEY`/`MINIO_SECRET_KEY`) had also been sitting in `.env`/`.env.example` since Day 1,
+silently ignored because `config/env.ts`'s Zod schema never listed them. New `lib/storage.ts` is the
+one file that talks to MinIO: `ensureBucketExists()` (called on boot, creates the bucket if missing,
+warns-but-doesn't-crash if MinIO is unreachable — a deliberately different severity than `env.ts`'s
+hard fail on bad secrets), `uploadFileToStorage`/`deleteFileFromStorage`, and
+`getSignedDownloadUrl` (a 15-minute presigned URL — the browser downloads straight from MinIO, our
+API never streams file bytes on the way out). `TaskAttachment` (Day 8) now supports EITHER a link
+(`url`) OR a real upload (`storageKey`/`mimeType`/`sizeBytes`) — never both, enforced in
+`task.service.ts` since Mongoose has no "exactly one of these fields" validator built in. New route:
+`POST .../tasks/:taskId/attachments/upload`, multipart via `multer` (memory storage, 10 MB limit),
+same "any active member, no permission gate" rule as Day 8's link attachments. Frontend:
+`TaskDetailModal.tsx` gained a file-upload control that shows both kinds of attachment in one
+identical-looking list.
+
 ---
 
-### ⚠️ Days 12-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
+### ⚠️ Days 13-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
 
 The schedule and build-guide PDFs referenced by the README are **not present in this repo**. What
-follows for Days 12-18 is reconstructed **only** from forward-looking comments already written into
-the Day 1-11 code and learning notes. Treat the day numbers below with **decreasing confidence** the
-further you go — Days 12-15 are educated guesses about ordering; Day 18 has zero hints anywhere.
+follows for Days 13-18 is reconstructed **only** from forward-looking comments already written into
+the Day 1-12 code and learning notes. Treat the day numbers below with **decreasing confidence** the
+further you go — Days 13-15 are educated guesses about ordering; Day 18 has zero hints anywhere.
 
-**Days 12-15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
-- **Real file storage** — replacing Day 8's link-only attachments with actual uploads to the MinIO
-  bucket that's been running unused since Day 1. Needs multipart upload parsing + an S3-compatible
-  client (no such package in `apps/api/package.json` yet) + signed URL generation.
+**Days 13-15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
 - **Automatic access-token refresh** — the frontend has never actually called `POST /auth/refresh`
   automatically; `lib/api.ts` explicitly flags this as a "later day" task since Day 3. Needs an
   `apiRequest` wrapper upgrade: on a 401 `AUTHENTICATION_REQUIRED`, silently call `/refresh` once
@@ -502,10 +564,13 @@ loops).** Never claim more confidence than what was actually run.
 
 ## 8. Current state / how to resume
 
-- Git: as of Day 11, the working tree has the Day 11 changes staged but **not yet committed** (the
-  user has not asked for an automatic push since Day 7 — check `git log` and `git status` first
-  before assuming anything about what's actually committed; don't assume Days 8-11 are pushed just
-  because Day 7 was).
+- Git: as of Day 12, the working tree has the Day 12 changes (plus the post-Day-11 role-permission-
+  editing fix) staged but **not yet committed** (the user has not asked for an automatic push since
+  Day 7 — check `git log` and `git status` first before assuming anything about what's actually
+  committed; don't assume Days 8-12 are pushed just because Day 7 was).
+- Real local testing of Day 12 needs the user's own Docker MinIO container actually running
+  (`docker compose up -d minio`, console at `localhost:9001`) - this sandbox has never had one
+  available, same gap as the database in every prior day.
 - The README.md's "Status" line is stale (still says "Day 1 of 18") — worth fixing whenever
   convenient, it's a one-line change.
 - No `.env` file is assumed to exist in this sandbox — real local development (`pnpm dev` against
@@ -550,6 +615,6 @@ this file is a MAP for another AI picking up the project cold, not the whole ter
 ---
 
 **Bottom line for whoever picks this up next**: follow §5's rhythm exactly (including this file's
-own update step, §9), respect the conventions in §4 (they're consistent across 11,000+ lines of
+own update step, §9), respect the conventions in §4 (they're consistent across 12,000+ lines of
 code so far — don't introduce a different style), verify using §7's methodology, and be honest
-about the Day 12-18 uncertainty in §6 until you can get your hands on the real schedule PDF.
+about the Day 13-18 uncertainty in §6 until you can get your hands on the real schedule PDF.

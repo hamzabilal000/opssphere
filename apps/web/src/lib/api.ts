@@ -30,6 +30,7 @@ import type {
   CreateInvitationInput,
   CreateOrganizationInput,
   CreateRoleInput,
+  UpdateRoleInput,
   CreateDepartmentInput,
   CreateTeamInput,
   CreateOrgInvitationInput,
@@ -71,6 +72,27 @@ async function apiRequest<T>(
     credentials: "include", // same job as axios.defaults.withCredentials = true
     headers: options.body ? { "Content-Type": "application/json" } : undefined,
     body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+  const body = (await res.json()) as ApiResponse<T>;
+
+  if (!body.success) {
+    throw new Error(body.message);
+  }
+  return body.data;
+}
+
+// DAY 12: a SECOND thin wrapper, just for real file uploads. Deliberately
+// separate from apiRequest above rather than a shared option, because a
+// file upload needs a `FormData` body instead of a JSON string, and -
+// important - it must NOT set a "Content-Type" header itself: the browser
+// sets `multipart/form-data; boundary=...` automatically when it sees the
+// body is a FormData instance, and manually setting Content-Type would
+// strip that boundary out and break the upload.
+async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  const res = await fetch(`/api/v1${path}`, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
   });
   const body = (await res.json()) as ApiResponse<T>;
 
@@ -218,6 +240,21 @@ export function listRoles(organizationId: string): Promise<{ roles: RoleSummary[
 export function createRole(organizationId: string, input: CreateRoleInput): Promise<{ role: RoleSummary }> {
   return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/roles`, {
     method: "POST",
+    body: input,
+  });
+}
+
+// ADDED post-Day-11: edits an EXISTING role's name and/or permissions -
+// see updateRoleSchema in packages/validation for why this closes a real
+// gap (an org's Owner role can be frozen at whatever permissions existed
+// when the org was created).
+export function updateRole(
+  organizationId: string,
+  roleId: string,
+  input: UpdateRoleInput
+): Promise<{ role: RoleSummary }> {
+  return apiRequest(`/organizations/${encodeURIComponent(organizationId)}/roles/${encodeURIComponent(roleId)}`, {
+    method: "PATCH",
     body: input,
   });
 }
@@ -508,6 +545,24 @@ export function createTaskAttachment(
     method: "POST",
     body: input,
   });
+}
+
+// DAY 12: the REAL-file counterpart to createTaskAttachment above - builds
+// a FormData object (the browser's own "multipart form" data structure)
+// instead of a plain JS object, and posts it via apiUpload instead of
+// apiRequest. `name` is optional - if left blank, the backend falls back
+// to the file's own filename (see uploadTaskAttachmentSchema).
+export function uploadTaskAttachment(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  file: File,
+  name?: string
+): Promise<{ attachment: TaskAttachmentSummary }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (name) formData.append("name", name);
+  return apiUpload(`${taskPath(organizationId, projectId, taskId)}/attachments/upload`, formData);
 }
 
 export function deleteTaskAttachment(

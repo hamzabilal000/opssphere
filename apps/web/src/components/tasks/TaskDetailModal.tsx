@@ -21,6 +21,7 @@ import {
   Check,
   GitBranch,
   ListChecks,
+  UploadCloud,
 } from "lucide-react";
 import type { ProjectMemberSummary, SprintSummary, TaskCommentSummary, TaskSummary } from "@opssphere/shared-types";
 import {
@@ -33,6 +34,7 @@ import {
   useDeleteTaskCommentMutation,
   useTaskAttachmentsQuery,
   useCreateTaskAttachmentMutation,
+  useUploadTaskAttachmentMutation,
   useDeleteTaskAttachmentMutation,
   useTimeEntriesQuery,
   useCreateTimeEntryMutation,
@@ -72,6 +74,15 @@ function renderCommentBody(body: string, mentionedEmails: string[]): ReactNode {
       part
     )
   );
+}
+
+// DAY 12: a real uploaded file's size arrives as a plain number of bytes
+// (see TaskAttachmentSummary.sizeBytes) - this just renders it the way a
+// human actually wants to read it ("142 KB" instead of "145238").
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 interface TaskDetailModalProps {
@@ -116,6 +127,7 @@ export function TaskDetailModal({
 
   const attachmentsQuery = useTaskAttachmentsQuery(organizationId, projectId, task.id);
   const createAttachmentMutation = useCreateTaskAttachmentMutation(organizationId, projectId, task.id);
+  const uploadAttachmentMutation = useUploadTaskAttachmentMutation(organizationId, projectId, task.id);
   const deleteAttachmentMutation = useDeleteTaskAttachmentMutation(organizationId, projectId, task.id);
 
   const timeEntriesQuery = useTimeEntriesQuery(organizationId, projectId, task.id);
@@ -289,6 +301,25 @@ export function TaskDetailModal({
       setNewAttachmentUrl("");
     } catch (err) {
       toast((err as Error).message, "error");
+    }
+  }
+
+  // DAY 12: picking a file immediately uploads it - no separate "select
+  // then submit" step, unlike the link form above (which needs a name AND
+  // a url typed in first). `e.target.value = ""` afterward lets the SAME
+  // file be picked again later (browsers otherwise treat re-selecting an
+  // unchanged file as "nothing changed," so onChange wouldn't fire twice
+  // in a row for the same file without this reset).
+  async function handleUploadFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      await uploadAttachmentMutation.mutateAsync({ file });
+      toast(`"${file.name}" uploaded.`);
+    } catch (err) {
+      toast((err as Error).message, "error");
+    } finally {
+      e.target.value = "";
     }
   }
 
@@ -610,7 +641,11 @@ export function TaskDetailModal({
             </form>
           </div>
 
-          {/* Attachments (link-based, see task-attachment.model.ts) */}
+          {/* Attachments - Day 8's link-based kind, plus Day 12's real
+              uploaded-file kind (see task-attachment.model.ts's "exactly
+              one of url/storageKey" comment). Both render identically here
+              - the frontend never has to know or care which kind a given
+              attachment actually is, see TaskAttachmentSummary's comment. */}
           <div>
             <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900 mb-2">
               <Paperclip className="w-4 h-4" /> Attachments
@@ -627,18 +662,44 @@ export function TaskDetailModal({
                   >
                     {a.name}
                   </a>
-                  {(a.uploadedBy === currentUserId || canManage) && (
-                    <button
-                      onClick={() => deleteAttachmentMutation.mutate(a.id)}
-                      className="text-red-600"
-                      aria-label="Remove attachment"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 shrink-0">
+                    {/* Only present for an UPLOADED attachment - a link
+                        attachment has neither field (see shared-types). */}
+                    {a.sizeBytes !== undefined && (
+                      <span className="text-xs text-slate-400">{formatBytes(a.sizeBytes)}</span>
+                    )}
+                    {(a.uploadedBy === currentUserId || canManage) && (
+                      <button
+                        onClick={() => deleteAttachmentMutation.mutate(a.id)}
+                        className="text-red-600"
+                        aria-label="Remove attachment"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
+
+            {/* Real upload - a plain <input type="file"> triggers the
+                upload the moment something's picked, see handleUploadFile.
+                A signed MinIO URL is only valid for 15 minutes (see
+                lib/storage.ts) - that's why clicking an old link in this
+                list eventually stops working and needs a fresh page load,
+                a deliberate, disclosed tradeoff, not a bug. */}
+            <label className="flex items-center gap-2 text-sm text-brand-dark border border-dashed border-slate-300 rounded-md px-3 py-2 cursor-pointer hover:bg-slate-50 mb-2">
+              <UploadCloud className="w-4 h-4" />
+              {uploadAttachmentMutation.isPending ? "Uploading…" : "Upload a file (max 10 MB)"}
+              <input
+                type="file"
+                className="hidden"
+                disabled={uploadAttachmentMutation.isPending}
+                onChange={handleUploadFile}
+              />
+            </label>
+
+            <p className="text-xs text-slate-400 mb-1">…or attach a link instead:</p>
             <form onSubmit={handleAddAttachment} className="flex gap-2">
               <Input
                 required

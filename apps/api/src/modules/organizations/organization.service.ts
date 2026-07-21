@@ -22,11 +22,19 @@ import { ALL_PERMISSIONS } from "@opssphere/shared-types";
 import type {
   CreateOrganizationInput,
   CreateRoleInput,
+  UpdateRoleInput,
   CreateDepartmentInput,
   CreateTeamInput,
   CreateOrgInvitationInput,
 } from "@opssphere/validation";
-import type { OrganizationSummary, MembershipSummary, RoleSummary, DepartmentSummary, TeamSummary } from "@opssphere/shared-types";
+import type {
+  Permission,
+  OrganizationSummary,
+  MembershipSummary,
+  RoleSummary,
+  DepartmentSummary,
+  TeamSummary,
+} from "@opssphere/shared-types";
 
 const INVITATION_TOKEN_TTL_DAYS = 7;
 
@@ -237,6 +245,61 @@ export async function createRole(organizationId: string, input: CreateRoleInput)
     permissions: input.permissions,
     isSystemRole: false, // only createOrganization's seeding step can create a system role
   });
+
+  return {
+    id: role._id.toString(),
+    name: role.name,
+    permissions: role.permissions,
+    isSystemRole: role.isSystemRole,
+    createdAt: role.createdAt.toISOString(),
+  };
+}
+
+// ADDED post-Day-11: lets an already-existing role's name and/or
+// permissions be changed. Deliberately allowed for SYSTEM roles too
+// (Owner/Member) - unlike deleteRole below, which blocks system roles
+// outright. Renaming a system role is still blocked (their names are part
+// of their identity - see role.model.ts), but their PERMISSIONS can be
+// edited, which is exactly what fixes an org whose Owner role was created
+// before a later day added a new permission string to the catalog (see
+// createOrganization's comment on ALL_PERMISSIONS being a one-time
+// snapshot, not a live reference).
+export async function updateRole(
+  organizationId: string,
+  roleId: string,
+  input: UpdateRoleInput
+): Promise<RoleSummary> {
+  const role = await Role.findOne({ _id: roleId, organizationId });
+  if (!role) {
+    throw new ApiError(404, "RESOURCE_NOT_FOUND", "Role not found.");
+  }
+
+  if (input.name !== undefined) {
+    if (role.isSystemRole) {
+      throw new ApiError(409, "CONFLICT", "The built-in Owner and Member roles can't be renamed.");
+    }
+    const existing = await Role.findOne({ organizationId, name: input.name, _id: { $ne: role._id } });
+    if (existing) {
+      throw new ApiError(409, "CONFLICT", "A role with that name already exists in this organization.");
+    }
+    role.name = input.name;
+  }
+
+  // TYPESCRIPT NOTE: `updateRoleSchema`'s `z.enum(permissionValues)` (see
+  // packages/validation) infers as plain `string`, not the literal
+  // `Permission` union - `permissionValues` itself is only cast to
+  // `[string, ...string[]]` for Zod's benefit, so Zod can't narrow any
+  // further than that. `createRole` right below sidesteps this because
+  // `Role.create({...})` accepts a looser "partial" shape; assigning
+  // directly to an already-hydrated document's field (`role.permissions =
+  // ...`) doesn't get that same leniency, so one small, deliberate cast is
+  // needed here - Mongoose's own `enum: ALL_PERMISSIONS` on the schema
+  // (role.model.ts) is the real runtime backstop either way.
+  if (input.permissions !== undefined) {
+    role.permissions = input.permissions as Permission[];
+  }
+
+  await role.save();
 
   return {
     id: role._id.toString(),

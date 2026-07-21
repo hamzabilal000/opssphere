@@ -7,6 +7,7 @@
 // ============================================================================
 
 import { Types } from "mongoose";
+import { randomUUID } from "node:crypto";
 import { Project } from "../projects/project.model.js";
 import { ProjectMember } from "../projects/project-member.model.js";
 import { Membership } from "../organizations/membership.model.js";
@@ -17,6 +18,7 @@ import { TaskComment } from "./task-comment.model.js";
 import { TaskAttachment } from "./task-attachment.model.js";
 import { TimeEntry } from "./time-entry.model.js";
 import { ApiError } from "../../middleware/errorHandler.js";
+import { uploadFileToStorage, deleteFileFromStorage, getSignedDownloadUrl } from "../../lib/storage.js";
 import type {
   CreateSprintInput,
   UpdateSprintInput,
@@ -569,8 +571,33 @@ export async function deleteComment(
 }
 
 // ----------------------------------------------------------------------------
-// ATTACHMENTS  (link-based - see task-attachment.model.ts for why)
+// ATTACHMENTS  (Day 8: link-only. Day 12 added real uploads - see
+// task-attachment.model.ts for the "exactly one of url/storageKey" shape.)
 // ----------------------------------------------------------------------------
+
+// Turns ONE TaskAttachment document into a TaskAttachmentSummary. Async
+// (unlike every other "toXSummary" helper in this file) because an
+// UPLOADED attachment needs a fresh signed URL generated from MinIO every
+// single time it's shown - see lib/storage.ts's getSignedDownloadUrl for
+// why that URL is short-lived rather than a permanent link.
+async function toAttachmentSummary(
+  attachment: InstanceType<typeof TaskAttachment>,
+  emailByUserId: Map<string, string>
+): Promise<TaskAttachmentSummary> {
+  const url = attachment.storageKey ? await getSignedDownloadUrl(attachment.storageKey) : (attachment.url as string);
+
+  return {
+    id: attachment._id.toString(),
+    name: attachment.name,
+    url,
+    mimeType: attachment.mimeType,
+    sizeBytes: attachment.sizeBytes,
+    uploadedBy: attachment.uploadedBy.toString(),
+    uploadedByEmail: emailByUserId.get(attachment.uploadedBy.toString()) ?? "unknown",
+    createdAt: attachment.createdAt.toISOString(),
+  };
+}
+
 export async function listAttachments(
   organizationId: string,
   projectId: string,
@@ -584,16 +611,15 @@ export async function listAttachments(
   const users = await User.find({ _id: { $in: userIds } });
   const emailByUserId = new Map(users.map((u) => [u._id.toString(), u.email]));
 
-  return attachments.map((a) => ({
-    id: a._id.toString(),
-    name: a.name,
-    url: a.url,
-    uploadedBy: a.uploadedBy.toString(),
-    uploadedByEmail: emailByUserId.get(a.uploadedBy.toString()) ?? "unknown",
-    createdAt: a.createdAt.toISOString(),
-  }));
+  // Signed URLs are generated one at a time via Promise.all rather than in
+  // a loop with individual awaits - same "don't serialize independent
+  // async work" idea as every batched query elsewhere in this file, just
+  // applied to calls to MinIO instead of MongoDB this time.
+  return Promise.all(attachments.map((a) => toAttachmentSummary(a, emailByUserId)));
 }
 
+// The ORIGINAL Day 8 way of adding an attachment - a plain external link,
+// no file storage involved at all.
 export async function createAttachment(
   organizationId: string,
   projectId: string,
@@ -612,14 +638,43 @@ export async function createAttachment(
   });
   const uploader = await User.findById(uploadedBy);
 
-  return {
-    id: attachment._id.toString(),
-    name: attachment.name,
-    url: attachment.url,
-    uploadedBy: attachment.uploadedBy.toString(),
-    uploadedByEmail: uploader?.email ?? "unknown",
-    createdAt: attachment.createdAt.toISOString(),
-  };
+  return toAttachmentSummary(attachment, new Map(uploader ? [[uploader._id.toString(), uploader.email]] : []));
+}
+
+// DAY 12's new way: a REAL uploaded file. `file` is whatever multer hands
+// the controller after parsing the multipart request (see
+// task.controller.ts's uploadAttachmentHandler) - we only need three
+// things off of it: the raw bytes, its MIME type, and its original
+// filename (used as a fallback if no `name` was typed in).
+export async function createUploadedAttachment(
+  organizationId: string,
+  projectId: string,
+  taskId: string,
+  uploadedBy: string,
+  file: { buffer: Buffer; mimetype: string; size: number; originalname: string },
+  providedName: string | undefined
+): Promise<TaskAttachmentSummary> {
+  await findTaskOrThrow(organizationId, projectId, taskId);
+
+  // The MinIO object key - deliberately namespaced by org/project/task so
+  // two different tasks (even in totally different organizations) can
+  // never collide on the same key, plus a random id so two uploads of a
+  // file with the identical name never overwrite each other either.
+  const storageKey = `orgs/${organizationId}/projects/${projectId}/tasks/${taskId}/${randomUUID()}-${file.originalname}`;
+  await uploadFileToStorage(storageKey, file.buffer, file.mimetype);
+
+  const attachment = await TaskAttachment.create({
+    organizationId,
+    taskId,
+    name: providedName || file.originalname,
+    storageKey,
+    mimeType: file.mimetype,
+    sizeBytes: file.size,
+    uploadedBy,
+  });
+  const uploader = await User.findById(uploadedBy);
+
+  return toAttachmentSummary(attachment, new Map(uploader ? [[uploader._id.toString(), uploader.email]] : []));
 }
 
 // `canManageTasks` is the caller's task.manage permission, resolved by the
@@ -644,6 +699,21 @@ export async function deleteAttachment(
   const isUploader = attachment.uploadedBy.toString() === actingUserId;
   if (!isUploader && !canManageTasks) {
     throw new ApiError(403, "FORBIDDEN", "Only the uploader or a task manager can remove this attachment.");
+  }
+
+  // DAY 12: an uploaded attachment also has real bytes sitting in MinIO -
+  // clean those up too, not just the database row. Deliberately
+  // best-effort: if MinIO happens to be unreachable right this moment, we
+  // still remove the database record rather than leaving the attachment
+  // stuck forever - a orphaned object in MinIO is a much smaller problem
+  // than a task the user can no longer manage at all.
+  if (attachment.storageKey) {
+    try {
+      await deleteFileFromStorage(attachment.storageKey);
+    } catch (err) {
+      // Not re-thrown on purpose - see the comment above.
+      console.error("Failed to delete storage object", attachment.storageKey, err);
+    }
   }
 
   await attachment.deleteOne();

@@ -177,6 +177,26 @@ export const createRoleSchema = z.object({
 });
 export type CreateRoleInput = z.infer<typeof createRoleSchema>;
 
+// ADDED post-Day-11: closes a real gap discovered while using the app -
+// `createOrganization` (organization.service.ts) snapshots `ALL_PERMISSIONS`
+// into a new org's "Owner" role ONCE, at creation time. Every later day
+// that adds a new permission string (task.manage, ticket.assign,
+// risk.manage, ...) does NOT retroactively add it to already-existing
+// roles - there was previously no way to fix that short of a direct
+// database edit. This schema lets an existing role's name (non-system
+// only, enforced in organization.service.ts's updateRole) and/or
+// permissions list be edited after creation, same "dedupe with a Set"
+// treatment as createRoleSchema above.
+export const updateRoleSchema = z.object({
+  name: z.string().min(2, "Name must be at least 2 characters").max(60, "Name is too long").optional(),
+  permissions: z
+    .array(z.enum(permissionValues))
+    .min(1, "Choose at least one permission")
+    .transform((perms) => Array.from(new Set(perms)))
+    .optional(),
+});
+export type UpdateRoleInput = z.infer<typeof updateRoleSchema>;
+
 export const createDepartmentSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(80, "Name is too long"),
 });
@@ -323,6 +343,16 @@ export const createTaskAttachmentSchema = z.object({
   url: z.string().url("Enter a valid URL"),
 });
 export type CreateTaskAttachmentInput = z.infer<typeof createTaskAttachmentSchema>;
+
+// DAY 12: validates the one plain TEXT field that rides along with a real
+// file upload (multipart/form-data request - the FILE itself is handled
+// by multer, not Zod, since Zod only ever validates plain JS values, never
+// a raw byte stream). `name` is optional here - if left blank, the
+// service falls back to the uploaded file's own filename.
+export const uploadTaskAttachmentSchema = z.object({
+  name: z.string().min(1, "Name can't be blank").max(200, "Name is too long").optional(),
+});
+export type UploadTaskAttachmentInput = z.infer<typeof uploadTaskAttachmentSchema>;
 
 export const createTimeEntrySchema = z.object({
   minutes: z.coerce.number().int().min(1, "Must be at least 1 minute").max(1440, "Can't exceed 24 hours in one entry"),

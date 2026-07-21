@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 12 — Real File Storage</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 12 OF 18</div>
+  <h1>Real File Storage</h1>
+  <p class="sub">MinIO has been running in docker-compose.yml, completely unused, since Day 1. Today it
+  finally does something - and along the way, five environment variables that were quietly being
+  ignored since Day 1 start actually mattering.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Day 8 gave tasks "attachments" that were really just a name and a URL - a link to a file already
+sitting somewhere else (Drive, Dropbox, wherever). Today adds a SECOND way to attach something: a real
+uploaded file, streamed into the MinIO bucket that's been provisioned but untouched this whole time.
+Both kinds of attachment now live side by side on the exact same list, and look identical to the
+frontend - it never has to know or care which one it's looking at.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every file involved has comments explaining what's new - especially <code>lib/storage.ts</code>
+  (the one new file that talks to MinIO) and <code>task.service.ts</code>'s
+  <code>toAttachmentSummary</code>, worth reading closely.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. A discovered gap: env vars that were silently ignored for 11 days</h3>
+<p>Digging in to build this, it turned out <code>.env</code> and <code>.env.example</code> already had
+five MinIO-related lines (<code>MINIO_ENDPOINT</code>, <code>MINIO_PORT</code>, <code>MINIO_BUCKET</code>,
+<code>MINIO_ACCESS_KEY</code>, <code>MINIO_SECRET_KEY</code>) sitting there since Day 1 - but
+<code>config/env.ts</code>'s Zod schema never asked for them. A schema without
+<code>.strict()</code> just quietly ignores env vars it doesn't know about - so those five lines had
+been doing precisely nothing since the very first day of this project. Adding them to the schema is
+what finally makes them real.</p>
+
+<h3>2. Presigned URLs - a file our own server never touches on the way out</h3>
+<p>There's no route like <code>GET /attachments/:id/raw</code> streaming file bytes through our
+Express server. Instead, <code>lib/storage.ts</code>'s <code>getSignedDownloadUrl</code> asks MinIO
+itself to generate a URL that's valid for exactly 15 minutes and points DIRECTLY at MinIO - the
+browser downloads straight from MinIO, our API never sees the bytes on the way out (it only saw them
+on the way IN, during upload). The expiry is baked into the signature itself, so a link that gets
+copy-pasted somewhere and forgotten just stops working on its own, with no code anywhere that has to
+actively revoke it.</p>
+
+<h3>3. "Exactly one of two fields" - a shape Mongoose doesn't enforce for you</h3>
+<p><code>TaskAttachment</code> now has EITHER <code>url</code> (Day 8's link kind) OR
+<code>storageKey</code>/<code>mimeType</code>/<code>sizeBytes</code> (today's upload kind) - never
+both, never neither. Mongoose has no built-in "exactly one of these fields" validator, so this rule
+lives entirely in <code>task.service.ts</code>: <code>createAttachment</code> only ever sets
+<code>url</code>, <code>createUploadedAttachment</code> only ever sets the other three. A shared
+<code>toAttachmentSummary</code> helper checks which one is present and builds the right kind of
+<code>url</code> to send the frontend either way.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext">The server boots, connects to Mongo, then calls <code>ensureBucketExists()</code> - checks whether the "opssphere" bucket exists in MinIO yet, and creates it if not (a fresh MinIO container starts with ZERO buckets).</div></div>
+<div class="step"><div class="num">2</div><div class="stext">Someone opens a task and clicks the new "Upload a file" control - a plain, hidden <code>&lt;input type="file"&gt;</code> behind a styled label.</div></div>
+<div class="step"><div class="num">3</div><div class="stext">Picking a file immediately uploads it - a <code>FormData</code> multipart request, handled by <code>multer</code> on the way in, which hands the controller the raw bytes as a Buffer.</div></div>
+<div class="step"><div class="num">4</div><div class="stext">The API streams those bytes straight to MinIO under a namespaced key (<code>orgs/&lt;id&gt;/projects/&lt;id&gt;/tasks/&lt;id&gt;/&lt;uuid&gt;-filename</code>) and saves a <code>TaskAttachment</code> row pointing at that key.</div></div>
+<div class="step"><div class="num">5</div><div class="stext">The attachment shows up in the list right alongside any link-based ones, with its size shown ("142 KB") - same list, same styling, no visual distinction between the two kinds.</div></div>
+<div class="step"><div class="num">6</div><div class="stext">Clicking it downloads directly from MinIO via a signed URL good for 15 minutes; deleting it removes both the database row AND the object in MinIO.</div></div>
+
+<h2>The new/changed files, in one picture</h2>
+<pre><code>apps/api/src/
+├── config/env.ts              <span style="color:#7be9d8">→ + 5 MinIO env vars, finally validated instead of silently ignored</span>
+├── lib/storage.ts             <span style="color:#7be9d8">→ brand new - the ONE file that talks to MinIO</span>
+├── index.ts                     <span style="color:#7be9d8">→ + ensureBucketExists() on boot, non-fatal if MinIO is unreachable</span>
+└── modules/tasks/
+    ├── task-attachment.model.ts  <span style="color:#7be9d8">→ url now optional; + storageKey, mimeType, sizeBytes</span>
+    ├── task.service.ts             <span style="color:#7be9d8">→ + createUploadedAttachment, + toAttachmentSummary (signed URLs)</span>
+    ├── task.controller.ts           <span style="color:#7be9d8">→ + uploadAttachmentHandler</span>
+    └── task.routes.ts                 <span style="color:#7be9d8">→ + POST .../attachments/upload (multer middleware)</span>
+
+apps/web/src/
+├── lib/api.ts               <span style="color:#7be9d8">→ + apiUpload() (FormData, not JSON), + uploadTaskAttachment</span>
+├── lib/queries.ts             <span style="color:#7be9d8">→ + useUploadTaskAttachmentMutation</span>
+└── components/tasks/TaskDetailModal.tsx  <span style="color:#7be9d8">→ + file-upload control, + formatBytes()</span></code></pre>
+
+<h2>A design detail worth understanding: why uploads don't crash the server on boot</h2>
+<div class="callout amber">
+  <strong class="title">ensureBucketExists() warns, it doesn't process.exit(1)</strong>
+  <code>config/env.ts</code> crashes the ENTIRE server if <code>ACCESS_TOKEN_SECRET</code> is
+  missing - correctly, since literally nothing works without auth. <code>ensureBucketExists()</code>
+  deliberately does NOT follow that same pattern: if MinIO is unreachable, it logs a warning and lets
+  the server keep starting. The reasoning: file uploads are ONE feature among many. A broken MinIO
+  connection should mean "uploading a file fails with a clear error," not "tasks, tickets, the whole
+  app is down." Matching failure severity to actual blast radius, not just copying the nearest
+  existing pattern, is the real lesson here.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>A 10 MB file-size limit, hardcoded in <code>task.routes.ts</code> - not user-configurable, a
+  reasonable small default for a demo/teaching project.</li>
+  <li>No image thumbnails/previews - an uploaded image shows the same generic link + size as a PDF or
+  a zip file. A reasonable "Day 17 polish" candidate, not today's scope.</li>
+  <li>No virus scanning / MIME-type allowlist - any file type multer accepts gets uploaded as-is. A
+  real production deployment would want this; a teaching project demonstrating the CORE upload/
+  download loop doesn't need it to prove the concept.</li>
+  <li>Deleting an attachment's MinIO object is best-effort (wrapped in try/catch, logged, never
+  re-thrown) - if MinIO happens to be down at that exact moment, the database row still gets removed
+  rather than leaving the task stuck. A small orphaned object in MinIO is a much smaller problem than
+  a task nobody can manage.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> - THIS TIME there ARE new packages (<code>@aws-sdk/client-s3</code>,
+  <code>@aws-sdk/s3-request-presigner</code>, <code>multer</code>).</li>
+  <li>Make sure Docker's MinIO container is actually running (<code>docker compose up -d minio</code> if
+  needed) - check <code>http://localhost:9001</code> (the MinIO console, login <code>opssphere</code> /
+  <code>opssphere123</code>) to confirm.</li>
+  <li>Run <code>pnpm dev</code>, open a task, and use the new "Upload a file" control.</li>
+  <li>Confirm the file appears in the MinIO console under the "opssphere" bucket, in a
+  <code>orgs/.../tasks/.../</code>-shaped path.</li>
+  <li>Click the attachment in the app to download it; wait 15+ minutes and try an OLD copied link -
+  confirm it's expired.</li>
+  <li>Delete the attachment from the app and confirm the object disappears from the MinIO console too.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every package (shared-types, validation, api, web) compiles with no TypeScript errors - clean on the first attempt, no fix-up round needed</td><td>✅ Confirmed</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) completes with no errors - 1,695 modules bundled successfully</td><td>✅ Confirmed</td></tr>
+  <tr><td>The new upload route and the existing link route both correctly reject requests with no login cookie, and a bogus URL still 404s</td><td>✅ Confirmed (401/404, tested without a database OR a running MinIO)</td></tr>
+  <tr><td><code>env.ts</code> actually reads the MinIO credentials from <code>.env</code> now (previously silently ignored)</td><td>✅ Confirmed</td></tr>
+  <tr><td>The actual upload → store in MinIO → signed URL → download loop, the 15-minute expiry, and delete-cleans-up-MinIO-too</td><td>⏳ Needs you to test it locally against a real running MinIO - this sandbox has never had one available, same gap as the database in every prior day</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Days 13-15 remain open per the reconstructed schedule - automatic access-token refresh, permission
+deny-rules/overrides, true drag-and-drop reordering, and multi-organization invitations are the
+next-most-concretely-referenced unbuilt features. See <code>docs/PROJECT_HANDOFF.md</code> for the
+full, honestly-uncertain breakdown.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 12 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

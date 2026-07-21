@@ -11,6 +11,7 @@ import type { Request, Response } from "express";
 import {
   createOrganizationSchema,
   createRoleSchema,
+  updateRoleSchema,
   createDepartmentSchema,
   createTeamSchema,
   updateMembershipRoleSchema,
@@ -141,6 +142,26 @@ export async function createRoleHandler(req: Request, res: Response) {
     data: { role },
   };
   res.status(201).json(body);
+}
+
+// PATCH /api/v1/organizations/:organizationId/roles/:roleId
+export async function updateRoleHandler(req: Request, res: Response) {
+  const parsed = updateRoleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, "VALIDATION_ERROR", "Validation failed", fieldErrorsFrom(parsed.error));
+  }
+
+  const role = await organizationService.updateRole(
+    req.organizationId ?? "",
+    String(req.params.roleId ?? ""),
+    parsed.data
+  );
+  const body: ApiSuccessResponse<{ role: RoleSummary }> = {
+    success: true,
+    message: "Role updated.",
+    data: { role },
+  };
+  res.status(200).json(body);
 }
 
 // DELETE /api/v1/organizations/:organizationId/roles/:roleId

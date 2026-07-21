@@ -28,6 +28,7 @@ import * as api from "./api";
 import type {
   CreateOrganizationInput,
   CreateRoleInput,
+  UpdateRoleInput,
   CreateDepartmentInput,
   CreateTeamInput,
   CreateOrgInvitationInput,
@@ -168,6 +169,17 @@ export function useCreateRoleMutation(organizationId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateRoleInput) => api.createRole(organizationId, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "roles"] }),
+  });
+}
+
+// ADDED post-Day-11: edit an existing role's name/permissions - see
+// api.ts's updateRole for why this exists.
+export function useUpdateRoleMutation(organizationId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ roleId, input }: { roleId: string; input: UpdateRoleInput }) =>
+      api.updateRole(organizationId, roleId, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["organizations", organizationId, "roles"] }),
   });
 }
@@ -519,6 +531,21 @@ export function useDeleteTaskAttachmentMutation(organizationId: string, projectI
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (attachmentId: string) => api.deleteTaskAttachment(organizationId, projectId, taskId, attachmentId),
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "attachments"],
+      }),
+  });
+}
+
+// DAY 12: the REAL-file counterpart to useCreateTaskAttachmentMutation
+// above - same invalidation target, since both kinds of attachment show
+// up in the exact same list.
+export function useUploadTaskAttachmentMutation(organizationId: string, projectId: string, taskId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ file, name }: { file: File; name?: string }) =>
+      api.uploadTaskAttachment(organizationId, projectId, taskId, file, name),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: ["organizations", organizationId, "projects", projectId, "tasks", taskId, "attachments"],

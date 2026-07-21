@@ -12,7 +12,7 @@
 
 import { useState } from "react";
 import { useParams } from "react-router-dom";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Pencil, X } from "lucide-react";
 import {
   useOrganizationQuery,
   useOrganizationMembersQuery,
@@ -20,6 +20,7 @@ import {
   useOrganizationDepartmentsQuery,
   useOrganizationTeamsQuery,
   useCreateRoleMutation,
+  useUpdateRoleMutation,
   useDeleteRoleMutation,
   useCreateDepartmentMutation,
   useDeleteDepartmentMutation,
@@ -28,8 +29,8 @@ import {
   useUpdateMemberRoleMutation,
   useCreateOrgInvitationMutation,
 } from "../lib/queries";
-import { PERMISSIONS } from "@opssphere/shared-types";
-import type { Permission } from "@opssphere/shared-types";
+import { PERMISSIONS, ALL_PERMISSIONS } from "@opssphere/shared-types";
+import type { Permission, RoleSummary } from "@opssphere/shared-types";
 import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -67,6 +68,7 @@ export default function OrganizationDetailPage() {
   const teamsQuery = useOrganizationTeamsQuery(organizationId);
 
   const createRoleMutation = useCreateRoleMutation(organizationId);
+  const updateRoleMutation = useUpdateRoleMutation(organizationId);
   const deleteRoleMutation = useDeleteRoleMutation(organizationId);
   const createDepartmentMutation = useCreateDepartmentMutation(organizationId);
   const deleteDepartmentMutation = useDeleteDepartmentMutation(organizationId);
@@ -77,6 +79,9 @@ export default function OrganizationDetailPage() {
 
   const [newRoleName, setNewRoleName] = useState("");
   const [newRolePermissions, setNewRolePermissions] = useState<Permission[]>([]);
+  const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
+  const [editRoleName, setEditRoleName] = useState("");
+  const [editRolePermissions, setEditRolePermissions] = useState<Permission[]>([]);
   const [newDepartmentName, setNewDepartmentName] = useState("");
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamDepartmentId, setNewTeamDepartmentId] = useState("");
@@ -121,6 +126,38 @@ export default function OrganizationDetailPage() {
     try {
       await deleteRoleMutation.mutateAsync(roleId);
       toast("Role deleted.");
+    } catch (err) {
+      toast((err as Error).message, "error");
+    }
+  }
+
+  // ADDED post-Day-11: editing an EXISTING role's permissions - this is
+  // what fixes an Owner role that got frozen with fewer permissions than
+  // exist today (see organization.service.ts's updateRole comment).
+  function startEditRole(role: RoleSummary) {
+    setEditingRoleId(role.id);
+    setEditRoleName(role.name);
+    setEditRolePermissions(role.permissions);
+  }
+
+  function toggleEditRolePermission(permission: Permission) {
+    setEditRolePermissions((prev) =>
+      prev.includes(permission) ? prev.filter((p) => p !== permission) : [...prev, permission]
+    );
+  }
+
+  async function handleSaveRoleEdit(role: RoleSummary) {
+    try {
+      await updateRoleMutation.mutateAsync({
+        roleId: role.id,
+        // System roles (Owner/Member) can't be renamed - only send `name`
+        // for a custom role, same rule organization.service.ts enforces.
+        input: role.isSystemRole
+          ? { permissions: editRolePermissions }
+          : { name: editRoleName, permissions: editRolePermissions },
+      });
+      setEditingRoleId(null);
+      toast("Role updated.");
     } catch (err) {
       toast((err as Error).message, "error");
     }
@@ -215,23 +252,89 @@ export default function OrganizationDetailPage() {
       <Card>
         <h2 className="font-semibold text-slate-900 mb-3">Roles</h2>
         <ul className="space-y-2 mb-4">
-          {roles.map((r) => (
-            <li key={r.id} className="flex items-center justify-between text-sm">
-              <span className="text-slate-700">
-                {r.name}
-                {r.isSystemRole && <span className="text-slate-400"> (built-in)</span>} —{" "}
-                {r.permissions.length} permission{r.permissions.length === 1 ? "" : "s"}
-              </span>
-              {canManage && !r.isSystemRole && (
-                <button
-                  onClick={() => handleDeleteRole(r.id)}
-                  className="text-red-600 flex items-center gap-1 text-xs"
-                >
-                  <Trash2 className="w-3.5 h-3.5" /> Delete
-                </button>
-              )}
-            </li>
-          ))}
+          {roles.map((r) => {
+            const isEditingThis = editingRoleId === r.id;
+            return (
+              <li key={r.id} className="text-sm border-b border-slate-100 last:border-0 pb-2 last:pb-0">
+                {isEditingThis ? (
+                  <div className="space-y-2 pt-1">
+                    {!r.isSystemRole && (
+                      <Input
+                        required
+                        value={editRoleName}
+                        onChange={(e) => setEditRoleName(e.target.value)}
+                        placeholder="Role name"
+                      />
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-400">
+                        {r.isSystemRole
+                          ? `Editing "${r.name}" (built-in — name can't change, permissions can)`
+                          : `Editing "${r.name}"`}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-xs text-brand-dark underline"
+                        onClick={() => setEditRolePermissions(Object.values(PERMISSIONS) as Permission[])}
+                      >
+                        Select all ({ALL_PERMISSIONS.length})
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                      {Object.values(PERMISSIONS).map((permission) => (
+                        <label key={permission} className="flex items-center gap-1.5 text-sm text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={editRolePermissions.includes(permission)}
+                            onChange={() => toggleEditRolePermission(permission)}
+                          />
+                          {PERMISSION_LABELS[permission]}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => handleSaveRoleEdit(r)}
+                        disabled={updateRoleMutation.isPending || editRolePermissions.length === 0}
+                      >
+                        Save
+                      </Button>
+                      <Button type="button" variant="ghost" onClick={() => setEditingRoleId(null)}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-700">
+                      {r.name}
+                      {r.isSystemRole && <span className="text-slate-400"> (built-in)</span>} —{" "}
+                      {r.permissions.length} permission{r.permissions.length === 1 ? "" : "s"}
+                    </span>
+                    {canManage && (
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => startEditRole(r)}
+                          className="text-slate-500 flex items-center gap-1 text-xs hover:text-slate-700"
+                        >
+                          <Pencil className="w-3.5 h-3.5" /> Edit
+                        </button>
+                        {!r.isSystemRole && (
+                          <button
+                            onClick={() => handleDeleteRole(r.id)}
+                            className="text-red-600 flex items-center gap-1 text-xs"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
 
         {canManage && (

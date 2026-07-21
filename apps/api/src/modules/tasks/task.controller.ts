@@ -15,6 +15,7 @@ import {
   createTaskCommentSchema,
   updateTaskCommentSchema,
   createTaskAttachmentSchema,
+  uploadTaskAttachmentSchema,
   createTimeEntrySchema,
   addChecklistItemSchema,
   updateChecklistItemSchema,
@@ -346,6 +347,39 @@ export async function createAttachmentHandler(req: Request, res: Response) {
   const body: ApiSuccessResponse<{ attachment: TaskAttachmentSummary }> = {
     success: true,
     message: "Attachment added.",
+    data: { attachment },
+  };
+  res.status(201).json(body);
+}
+
+// POST /api/v1/organizations/:organizationId/projects/:projectId/tasks/:taskId/attachments/upload
+// DAY 12: a REAL file, not a link. `upload.single("file")` (multer, wired
+// up in task.routes.ts) has already run by the time this handler starts -
+// it parses the multipart/form-data body and hands us `req.file` (the
+// actual bytes + metadata) and puts any other plain text fields (just
+// `name` here) onto `req.body` exactly like a normal form post.
+export async function uploadAttachmentHandler(req: Request, res: Response) {
+  if (!req.file) {
+    throw new ApiError(400, "VALIDATION_ERROR", "No file was uploaded.");
+  }
+
+  const parsed = uploadTaskAttachmentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ApiError(400, "VALIDATION_ERROR", "Validation failed", fieldErrorsFrom(parsed.error));
+  }
+
+  const attachment = await taskService.createUploadedAttachment(
+    req.organizationId ?? "",
+    String(req.params.projectId ?? ""),
+    String(req.params.taskId ?? ""),
+    req.userId ?? "",
+    req.file,
+    parsed.data.name
+  );
+
+  const body: ApiSuccessResponse<{ attachment: TaskAttachmentSummary }> = {
+    success: true,
+    message: "File uploaded.",
     data: { attachment },
   };
   res.status(201).json(body);

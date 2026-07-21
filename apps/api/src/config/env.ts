@@ -75,6 +75,23 @@ const envSchema = z.object({
   SMTP_HOST: z.string().default("localhost"),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
   MAIL_FROM: z.string().default("OpsSphere <no-reply@opssphere.local>"),
+
+  // DAY 12 — object storage (MinIO, an S3-compatible server; see
+  // docker-compose.yml). These five lines have actually been sitting in
+  // .env/.env.example since Day 1, but NOTHING read them until today - a
+  // Zod schema without `.strict()` just silently ignores env vars it
+  // doesn't ask for, so they were doing nothing at all. `STORAGE_DRIVER`
+  // is a z.enum with only one allowed value on purpose: if this project
+  // ever adds a second storage backend (e.g. local disk for a laptop demo
+  // with no Docker), this is where that choice would be validated - for
+  // now, setting anything else is almost certainly a typo, and "fail fast
+  // on boot" should catch that the same way it catches everything else.
+  STORAGE_DRIVER: z.enum(["minio"]).default("minio"),
+  MINIO_ENDPOINT: z.string().default("localhost"),
+  MINIO_PORT: z.coerce.number().int().positive().default(9000),
+  MINIO_BUCKET: z.string().min(1, "MINIO_BUCKET is required").default("opssphere"),
+  MINIO_ACCESS_KEY: z.string().min(1, "MINIO_ACCESS_KEY is required"),
+  MINIO_SECRET_KEY: z.string().min(1, "MINIO_SECRET_KEY is required"),
 });
 
 // .safeParse(...) checks `process.env` (all your real environment variables)
