@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 18 — Capstone Wrap-Up</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 18 OF 18 — FINAL</div>
+  <h1>Capstone Wrap-Up</h1>
+  <p class="sub">Day 17's learning note said it plainly: no comment anywhere in this codebase says what
+  Day 18 is. There was no PDF to check. So today isn't a new feature — it's the honest, disclosed guess
+  a final day of an 18-day plan almost always is: documentation, a full-project regression pass, and a
+  clear-eyed statement of what's actually done versus what's still open.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Three deliverables, zero new application code. A rewritten <code>README.md</code> that finally
+drops the stale "Day 1 of 18" status line and actually describes everything built across all 17
+prior days. A new <code>docs/DEPLOYMENT.md</code> — every environment variable pulled directly from
+<code>config/env.ts</code>, a pre-launch checklist, and an explicit callout of the two features that
+fail OPEN rather than closed (Day 12's file storage, Day 16's rate limiter) so nobody deploying this
+is surprised later by a silent degradation. A new <code>docs/DEMO_SCRIPT.md</code> — an 18-step
+guided walkthrough that touches one representative feature from every single day, in an order that
+tells one coherent story instead of a disconnected feature list. Then, the thing every prior day
+already did in miniature but today does across the WHOLE project at once: a fresh
+<code>rsync</code> → <code>pnpm install</code> → <code>tsc --noEmit</code> (all 4 packages) →
+<code>vite build</code> → a combined smoke test hitting one route from every module, proving the
+final 18-day codebase still typechecks, builds, and boots as one integrated whole.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always, with one exception</strong>
+  Every prior day's "code has comments explaining what's new" rule doesn't apply the same way today —
+  there's no application code to comment. Today's three new files ARE the deliverable, written the
+  same way the code comments always have been: for someone who's picking this project up fresh.
+</div>
+
+<h2>Two things worth understanding about a day like this</h2>
+
+<h3>1. A capstone day is a regression test on everything, not a feature on top of it</h3>
+<p>Every day from 1 through 17 verified itself in isolation — its own new routes, its own new
+TypeScript, its own smoke test. Day 18's QA pass is different in kind: it re-verifies EVERYTHING
+built across all 17 days together, in one <code>rsync</code>, one <code>pnpm install</code>, one
+typecheck run per package, one frontend build, and one smoke test hitting a representative route from
+every module — auth, organizations, projects, tasks, tickets, risks, and notifications — through a
+single running app instance. This is the same "no live database available" verification ceiling every
+prior day disclosed (see <code>PROJECT_HANDOFF.md</code> §7) — just run once, at the end, across
+the whole thing instead of once per day against that day's own slice.</p>
+
+<h3>2. Being honest about what's still open is part of the deliverable, not a footnote</h3>
+<p>Day 5 flagged one enhancement — deny-rules/overrides on top of the flat permission model — as a
+reasonable future addition, and no day between 5 and 17 ever picked it up. Rather than quietly
+dropping it or inventing a Day 18 feature to "use it up," the honest move is to say so directly: the
+rewritten README's Status section and this project's final <code>PROJECT_HANDOFF.md</code> entry both
+name it explicitly as open. A capstone day that claims more completeness than the codebase actually
+has is worse than one that draws a clear, accurate line around what got built.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext"><code>README.md</code> gets fully rewritten: links to every companion doc (learning notes, the handoff, and today's two new files), a real "What's actually in here" feature summary organized by theme (auth, orgs/roles, projects/tasks, tickets/risks, real-time, hardening, polish), and an honest "Status" section instead of the old "Day 1 of 18" placeholder.</div></div>
+<div class="step"><div class="num">2</div><div class="stext"><code>docs/DEPLOYMENT.md</code> is written by reading <code>config/env.ts</code> directly, not from memory — every variable it validates gets a table row with its default (if any) and what breaks if it's wrong, plus the two fail-open features called out by name.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><code>docs/DEMO_SCRIPT.md</code> is written by walking the whole day-by-day history in §6 of the handoff and picking ONE moment per day that shows its headline feature, then ordering those 18 moments into a single narrative (get in the door → build a team → do the work → get notified about it → do it all again without logging back in).</div></div>
+<div class="step"><div class="num">4</div><div class="stext">A fresh scratch copy is synced, dependencies installed, all 4 packages typechecked, the frontend production-built — the exact same layered check every prior day ran, just against the complete, final tree.</div></div>
+<div class="step"><div class="num">5</div><div class="stext">One new smoke-test script starts a single running app instance and fires an unauthenticated request at one representative route from every module built across all 18 days, asserting each comes back a clean <code>401 AUTHENTICATION_REQUIRED</code> (proving the whole routing/middleware chain is still wired together correctly end to end) and that a bogus route still 404s.</div></div>
+
+<h2>The new files, in one picture</h2>
+<pre><code>README.md                    <span style="color:#7be9d8">→ fully rewritten - real feature summary, honest Status section</span>
+docs/DEPLOYMENT.md            <span style="color:#7be9d8">→ NEW - env vars (from env.ts), build steps, pre-launch checklist,
+                                 fail-open features called out by name</span>
+docs/DEMO_SCRIPT.md           <span style="color:#7be9d8">→ NEW - one representative feature per day, 18 days as one story</span>
+docs/PROJECT_HANDOFF.md       <span style="color:#7be9d8">→ final Day 18 update - this is the last entry in §6</span>
+docs/learning-notes/18-capstone.html  <span style="color:#7be9d8">→ this file</span></code></pre>
+
+<h2>A design detail worth understanding: why this isn't a new feature day</h2>
+<div class="callout amber">
+  <strong class="title">Scoping a day with zero hints is itself a decision worth documenting</strong>
+  Every other day (1 through 17) had SOME forward-looking comment already written into the codebase
+  pointing at what was coming next. Day 18 had none. Rather than inventing a plausible-sounding feature
+  with no textual basis at all, the reconstructed plan (see <code>PROJECT_HANDOFF.md</code> §6) reasoned
+  from the SHAPE of the project instead: an 18-day plan ending on documentation/QA is a common, sensible
+  capstone shape, and it's one that can be built HONESTLY (real env vars, a real smoke test) rather than
+  invented. If the real schedule PDF ever surfaces and says otherwise, treat it as authoritative over
+  this guess — the same disclosure this project has carried since Day 1.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>No new backend or frontend code — everything already built across 17 days was already real,
+  working, and non-mocked; today adds no application feature on top of that.</li>
+  <li>The demo script assumes a human clicking through a real browser against a real running database —
+  it is a guide for a person, not a script that runs automatically, since that's the one thing this
+  sandbox has never had available to verify against directly.</li>
+  <li>The deployment guide documents what to check before deploying; it does not include actual
+  infrastructure-as-code, CI/CD config, or a Dockerfile for the API itself — none of that exists yet in
+  this repo, and inventing it without being asked would go beyond what was actually built.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Read <code>docs/DEMO_SCRIPT.md</code> top to bottom against a real <code>pnpm dev</code> session -
+  it's written to be followed literally, step by step.</li>
+  <li>Read <code>docs/DEPLOYMENT.md</code>'s environment variable table against your own
+  <code>.env</code> - confirm every required variable is actually set before trying to deploy anywhere.</li>
+  <li>Run the same four-step verification this whole project has used since Day 1
+  (<code>pnpm install</code>, <code>tsc --noEmit</code> in each package, <code>vite build</code>) against
+  your own clone, to confirm it holds up the same way it did in this sandbox.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>A completely fresh <code>rsync</code> + <code>pnpm install</code> of the ENTIRE final 18-day repo resolves cleanly with no missing/broken packages</td><td>✅ Confirmed</td></tr>
+  <tr><td>All 4 packages (shared-types, validation, api, web) typecheck with zero errors against the final, complete tree</td><td>✅ Confirmed</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) succeeds - 1,697 modules bundled, no errors</td><td>✅ Confirmed</td></tr>
+  <tr><td>A combined smoke test hitting one representative route from every module built across all 18 days (health, auth/me, sessions, organizations, roles, projects, tasks, tickets, risks, notifications) through a SINGLE running app instance - every protected route correctly 401s, health check 200s, a bogus route 404s</td><td>✅ Confirmed</td></tr>
+  <tr><td>Every environment variable documented in <code>DEPLOYMENT.md</code> matches exactly what <code>config/env.ts</code> actually validates - checked against the real file, not from memory</td><td>✅ Confirmed</td></tr>
+  <tr><td>The actual end-to-end experience described in <code>DEMO_SCRIPT.md</code> - real browsers, a real database, two real accounts - clicked through in order</td><td>⏳ Needs you to test it locally - the same gap disclosed on every prior day, now covering the whole project at once instead of one day's slice</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>This is the last day of the reconstructed 18-day plan. The one enhancement explicitly flagged and
+never assigned to a day — deny-rules/overrides on top of the flat permission model (see Day 5) —
+remains open for anyone continuing past this point. See <code>docs/PROJECT_HANDOFF.md</code>'s final
+"Bottom line" for the full handoff.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 18 of 18 (final)</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

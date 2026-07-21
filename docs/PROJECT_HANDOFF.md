@@ -59,7 +59,7 @@ that reconstruction as a best-effort placeholder, not a confirmed spec, and say 
 
 ---
 
-## 3. Repository structure (as of Day 17)
+## 3. Repository structure (as of Day 18 — final)
 
 ```
 OpsSphere/
@@ -140,11 +140,15 @@ OpsSphere/
 │   ├── eslint-config/                Shared lint rules
 │   └── tsconfig/                     Shared base tsconfig
 ├── docs/
-│   ├── learning-notes/               01 through 17 (HTML, styled, one per completed day)
-│   └── PROJECT_HANDOFF.md            This file — keep it updated after every day (see §9)
+│   ├── learning-notes/               01 through 18 (HTML, styled, one per completed day — 18 is final)
+│   ├── PROJECT_HANDOFF.md            This file — the final Day 18 update is this same edit
+│   ├── DEPLOYMENT.md                 (DAY 18, NEW) env vars (pulled from env.ts), build steps,
+│   │                                 pre-launch checklist, fail-open features called out by name
+│   └── DEMO_SCRIPT.md                (DAY 18, NEW) an 18-step guided walkthrough, one
+│                                      representative feature per day, told as one story
 ├── docker-compose.yml               MongoDB, Valkey, Mailpit, MinIO
-└── README.md                        Currently STALE — still says "Day 1 of 18", update this
-                                      when you pick the project back up
+└── README.md                        Rewritten Day 18 — real feature summary + honest Status
+                                      section, no longer says "Day 1 of 18"
 ```
 
 ---
@@ -673,7 +677,7 @@ button). Verified the fail-open path directly and completely in this sandbox (no
 needed to prove "requests keep flowing and the server doesn't crash when Valkey is down") — a
 stronger verification story than most hardening work usually gets.
 
-### ✅ Day 17 — Polish (most recently completed)
+### ✅ Day 17 — Polish
 Named explicitly once, back in the Day 6 learning note: *"Command palette, keyboard shortcuts, and a
 notifications drawer are explicitly Day 17 polish, not today."* All three landed. A new
 `Notification` module (see §4's new convention block) is triggered by two events so far -
@@ -693,27 +697,32 @@ crashes a connection, even for a user with no other data at all.
 
 ---
 
-### ⚠️ Day 18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
+### ✅ Day 18 — Capstone Wrap-Up (final day of the reconstructed plan)
+No comment anywhere in the Day 1-17 codebase referenced "Day 18" — this was the one day built with
+zero textual hint to reconstruct from, only the shape of the project itself (an 18-day plan ending on
+documentation/QA is a common, sensible capstone shape, disclosed as a reasoned guess rather than a
+documented fact). No new application code, model, permission, or route was added today — three new
+docs and one full-project regression pass. `README.md` was fully rewritten: real links to every
+companion doc, a genuine feature-by-theme summary of everything built across 17 days, and an honest
+"Status" section replacing the stale "Day 1 of 18" line. `docs/DEPLOYMENT.md` (new) documents every
+environment variable read directly from `config/env.ts` (not from memory), a pre-launch checklist, and
+an explicit callout of the two features that fail OPEN rather than closed (Day 12's file storage,
+Day 16's rate limiter) so a silent degradation in production isn't a surprise. `docs/DEMO_SCRIPT.md`
+(new) is an 18-step guided walkthrough — one representative feature from every day, ordered into a
+single story rather than a disconnected feature list. The QA pass repeated this whole project's
+layered verification (§7) across the FINAL, complete tree rather than one day's slice: a fresh
+`rsync`/`pnpm install`, `tsc --noEmit` clean across all 4 packages, a clean `vite build`, and a new
+combined smoke test hitting one representative route from every module (health, auth, sessions,
+organizations, roles, projects, tasks, tickets, risks, notifications) through a single running app
+instance — every protected route correctly 401s, health checks 200, a bogus route still 404s. **One
+enhancement remains explicitly open**: deny-rules/overrides on top of the flat permission model,
+flagged since Day 5 and never assigned to any specific day — named directly in both the README's
+Status section and here, rather than quietly dropped.
 
-The schedule and build-guide PDFs referenced by the README are **not present in this repo**. What
-follows for Day 18 is reconstructed **only** from forward-looking comments already written into the
-Day 1-17 code and learning notes.
-
-**Still on the list, no day ever assigned to it specifically:**
-- **Permission model enhancements** — deny-rules or overrides on top of the flat allow-list (Day 5
-  explicitly scoped these out, calling them a possible future addition, no day given). Nothing in the
-  codebase ties this to Day 18 specifically over any other remaining day - flag it as a candidate, not
-  a confirmed plan, if you pick this up.
-
-**Day 18 — unknown** *(zero hints anywhere in the codebase)*
-No comment anywhere references "Day 18." For an 18-day plan ending here, a final wrap-up day
-(deployment docs, a demo script, final QA pass, README cleanup) would be a typical shape for a
-capstone day — but this is a guess, not a documented fact. Flag it as such if you reach this point
-and don't have the real schedule PDF.
-
-**If you find the actual `OpsSphere_Build_Guide.pdf` / `OpsSphere_18_Day_Build_Schedule.pdf`,
-treat them as authoritative over everything in this section** — this reconstruction exists only
-because those files were missing when this handoff was written.
+**If the actual `OpsSphere_Build_Guide.pdf` / `OpsSphere_18_Day_Build_Schedule.pdf` ever surface,
+treat them as authoritative over this whole reconstructed plan** — every day from 13 through 18 was
+built from hints and reasonable judgment calls, not a confirmed spec, and that should stay disclosed
+even now that the plan is complete.
 
 ---
 
@@ -773,13 +782,18 @@ loops).** Never claim more confidence than what was actually run.
 
 ## 8. Current state / how to resume
 
-- Git: as of Day 17, the working tree has the Day 17 changes (plus Days 12-16 and the post-Day-11
-  role-permission-editing fix) staged but **not yet committed** (the user has not asked for an
-  automatic push since Day 7 — check `git log` and `git status` first before assuming anything
-  about what's actually committed; don't assume Days 8-17 are pushed just because Day 7 was).
-  **Note**: Day 16 updated `pnpm-lock.yaml` itself (three new dependencies) — if you re-run
-  `pnpm install` locally and it wants to change unrelated packages too, that's normal lockfile
-  resolution drift, not something Day 16 broke. Day 17 added no new dependencies.
+- Git: as of Day 18 (the final day of the reconstructed plan), the working tree has the Day 18
+  changes (plus every day back through Day 12 and the post-Day-11 role-permission-editing fix)
+  staged but **not yet committed** (the user has not asked for an automatic push since Day 7 —
+  check `git log` and `git status` first before assuming anything about what's actually committed;
+  don't assume Days 8-18 are pushed just because Day 7 was). **Note**: Day 16 updated
+  `pnpm-lock.yaml` itself (three new dependencies) — if you re-run `pnpm install` locally and it
+  wants to change unrelated packages too, that's normal lockfile resolution drift, not something
+  Day 16 broke. Days 17 and 18 added no new dependencies.
+- Day 18 added no new code to verify beyond the full-project regression pass already run (§7):
+  fresh `rsync` + `pnpm install`, `tsc --noEmit` clean across all 4 packages, a clean `vite build`,
+  and a combined smoke test hitting one representative route from every module through a single
+  running app instance — all confirmed clean against the complete, final 18-day tree.
 - Real local testing of Day 12 needs the user's own Docker MinIO container actually running
   (`docker compose up -d minio`, console at `localhost:9001`) - this sandbox has never had one
   available, same gap as the database in every prior day.
@@ -803,8 +817,9 @@ loops).** Never claim more confidence than what was actually run.
   auth-gate surface of the new routes and a real, DB-free socket connection proving the new
   auto-join-a-user-room logic doesn't crash - not the actual end-to-end mention-to-badge-update
   experience.
-- The README.md's "Status" line is stale (still says "Day 1 of 18") — worth fixing whenever
-  convenient, it's a one-line change.
+- The README.md's "Status" section was rewritten Day 18 and no longer says "Day 1 of 18" — it now
+  states the project is feature-complete per the reconstructed 18-day plan, with the one open
+  permission-model enhancement named explicitly.
 - No `.env` file is assumed to exist in this sandbox — real local development (`pnpm dev` against
   actual Docker services) has never been run or confirmed working end-to-end by the assistant; only
   the user, running it on their own machine with Docker Desktop, can confirm that. This now also
@@ -846,7 +861,14 @@ this file is a MAP for another AI picking up the project cold, not the whole ter
 
 ---
 
-**Bottom line for whoever picks this up next**: follow §5's rhythm exactly (including this file's
-own update step, §9), respect the conventions in §4 (they're consistent across 14,000+ lines of
-code so far — don't introduce a different style), verify using §7's methodology, and be honest
-about the Day 18 uncertainty in §6 until you can get your hands on the real schedule PDF.
+**Bottom line for whoever picks this up next**: the reconstructed 18-day plan is complete —
+roughly 14,500+ lines of code across 18 real, working, non-mocked days, verified at every step by
+§7's methodology and finished with a full-project regression pass in §6's Day 18 entry. Nothing
+here has been run against a real production deployment or a real live database by the assistant
+that built it — see `docs/DEPLOYMENT.md`'s honest disclosure and §7 for exactly what that gap
+means. If you're continuing past this point: respect the conventions in §4 (they're consistent
+across the whole codebase — don't introduce a different style), keep following §5's rhythm and
+§9's update habit, and the one clearly-flagged open item is permission model deny-rules/overrides
+(Day 5, never assigned to a day, still unbuilt). If the real `OpsSphere_Build_Guide.pdf` /
+`OpsSphere_18_Day_Build_Schedule.pdf` ever turn up, treat them as authoritative over every
+judgment call made in Days 13-18.
