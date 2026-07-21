@@ -438,23 +438,18 @@ export async function createOrgInvitation(
     throw new ApiError(404, "RESOURCE_NOT_FOUND", "Organization not found.");
   }
 
+  // DAY 15: existing OpsSphere users CAN now be invited into a second
+  // organization - the only thing still blocked here is inviting someone
+  // who's ALREADY a member of THIS one. Which acceptance flow the invitee
+  // gets (set-a-password vs. already-logged-in) is decided later, when
+  // they open the link - see auth.service.ts's getInvitationPreview
+  // (accountExists) and acceptInvitationAsExistingUser.
   const existingUser = await User.findOne({ email: input.email });
   if (existingUser) {
     const alreadyMember = await Membership.findOne({ organizationId, userId: existingUser._id });
     if (alreadyMember) {
       throw new ApiError(409, "CONFLICT", "That person is already a member of this organization.");
     }
-    // NOTE: Day 5 keeps this simple and doesn't yet support inviting an
-    // EXISTING OpsSphere user (who already has a password) into a second
-    // organization - acceptInvitation (auth.service.ts) always creates a
-    // brand new account. Supporting "join a second org with your existing
-    // login" is a reasonable Day 6+ improvement, called out here rather
-    // than silently mishandled.
-    throw new ApiError(
-      409,
-      "CONFLICT",
-      "An account with this email already exists. Inviting existing users into a second organization isn't supported yet."
-    );
   }
 
   const { rawToken, tokenHash } = generateOneTimeToken();

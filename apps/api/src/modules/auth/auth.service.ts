@@ -356,9 +356,15 @@ export async function getInvitationPreview(rawToken: string): Promise<Invitation
     throw new ApiError(400, "INVALID_TOKEN", "This invitation is invalid or has expired.");
   }
 
+  // DAY 15: the frontend needs to know WHICH acceptance flow to render
+  // before the person does anything - see InvitationPreview's comment in
+  // shared-types for why this single boolean is enough to decide that.
+  const existingUser = await User.findOne({ email: invitation.email });
+
   const preview: InvitationPreview = {
     email: invitation.email,
     expiresAt: invitation.expiresAt.toISOString(),
+    accountExists: Boolean(existingUser),
   };
 
   // DAY 5: only org-scoped invitations have these two fields set - a
@@ -392,6 +398,20 @@ export async function acceptInvitation(
     throw new ApiError(400, "INVALID_TOKEN", "This invitation is invalid or has expired.");
   }
 
+  // DAY 15: this route's whole job is CREATING a brand new account - if
+  // one already exists for this email (the normal case for a second-
+  // organization invite now, or a race where two invitations landed for
+  // the same address), send them to the OTHER acceptance route instead
+  // rather than quietly trying to create a duplicate account.
+  const existingUser = await User.findOne({ email: invitation.email });
+  if (existingUser) {
+    throw new ApiError(
+      409,
+      "CONFLICT",
+      "An account with this email already exists. Log in, then open this invitation link again to join."
+    );
+  }
+
   const passwordHash = await hashPassword(password);
 
   // Accepting an invitation proves ownership of the email the SAME way
@@ -422,4 +442,71 @@ export async function acceptInvitation(
 
   const { accessToken, refreshToken } = await createSessionAndTokens(user._id.toString(), context);
   return { user: toAuthUser(user), accessToken, refreshToken };
+}
+
+// DAY 15: the "join a SECOND organization" path. Unlike acceptInvitation
+// above, this one creates NO new account and asks for NO password - it
+// only ever runs for someone who's already logged in (requireAuth gates
+// the route in auth.routes.ts), and its whole job is just adding one more
+// Membership row to an account that already exists. Proving "this is
+// really you" comes from already holding a valid access-token cookie,
+// exactly the same as every other requireAuth-protected route in the
+// app - not from anything invitation-specific.
+export async function acceptInvitationAsExistingUser(
+  rawToken: string,
+  actingUserId: string
+): Promise<{ organizationId: string }> {
+  const tokenHash = hashOneTimeToken(rawToken);
+
+  const invitation = await Invitation.findOne({
+    tokenHash,
+    status: "pending",
+    expiresAt: { $gt: new Date() },
+  }).select("+tokenHash");
+
+  if (!invitation) {
+    throw new ApiError(400, "INVALID_TOKEN", "This invitation is invalid or has expired.");
+  }
+
+  if (!invitation.organizationId || !invitation.roleId) {
+    throw new ApiError(400, "VALIDATION_ERROR", "This invitation isn't tied to an organization.");
+  }
+
+  const actingUser = await User.findById(actingUserId);
+  if (!actingUser) {
+    throw new ApiError(404, "RESOURCE_NOT_FOUND", "User not found.");
+  }
+
+  // The one real check THIS route needs: the account you're currently
+  // logged in as has to be the exact account this invitation was sent
+  // to. Without this, anyone logged into ANY OpsSphere account could
+  // accept an invitation meant for someone else's inbox just by guessing
+  // (or being handed) the link.
+  if (actingUser.email.toLowerCase() !== invitation.email.toLowerCase()) {
+    throw new ApiError(
+      403,
+      "FORBIDDEN",
+      "This invitation was sent to a different email address than the one you're currently logged in as."
+    );
+  }
+
+  const alreadyMember = await Membership.findOne({
+    organizationId: invitation.organizationId,
+    userId: actingUser._id,
+  });
+  if (alreadyMember) {
+    throw new ApiError(409, "CONFLICT", "You're already a member of this organization.");
+  }
+
+  await Membership.create({
+    organizationId: invitation.organizationId,
+    userId: actingUser._id,
+    roleId: invitation.roleId,
+    status: "active",
+  });
+
+  invitation.status = "accepted";
+  await invitation.save();
+
+  return { organizationId: invitation.organizationId.toString() };
 }

@@ -57,7 +57,7 @@ that reconstruction as a best-effort placeholder, not a confirmed spec, and say 
 
 ---
 
-## 3. Repository structure (as of Day 14)
+## 3. Repository structure (as of Day 15)
 
 ```
 OpsSphere/
@@ -71,6 +71,10 @@ OpsSphere/
 │   │       ├── middleware/errorHandler.ts   ApiError class, errorHandler, notFoundHandler
 │   │       ├── modules/
 │   │       │   ├── auth/            user, session, invitation models + auth service/controller/routes
+│   │       │   │                    (extended Day 15 — accepting an invitation now has TWO paths:
+│   │       │   │                    the original password-setting one for a brand new email, and
+│   │       │   │                    acceptInvitationAsExistingUser for an email that already has
+│   │       │   │                    an account, joining a second organization)
 │   │       │   ├── organizations/   organization, membership, role, department, team models +
 │   │       │   │                    tenant.middleware.ts (requireOrgMembership, requirePermission)
 │   │       │   ├── projects/        project, project-member, milestone models + service/controller/routes
@@ -117,7 +121,7 @@ OpsSphere/
 │   ├── eslint-config/                Shared lint rules
 │   └── tsconfig/                     Shared base tsconfig
 ├── docs/
-│   ├── learning-notes/               01 through 14 (HTML, styled, one per completed day)
+│   ├── learning-notes/               01 through 15 (HTML, styled, one per completed day)
 │   └── PROJECT_HANDOFF.md            This file — keep it updated after every day (see §9)
 ├── docker-compose.yml               MongoDB, Valkey, Mailpit, MinIO
 └── README.md                        Currently STALE — still says "Day 1 of 18", update this
@@ -258,6 +262,23 @@ make the codebase feel inconsistent and will likely surprise whoever reads it ne
   contiguous-positions invariant above holds, only the affected range ever needs to move — this is
   what keeps a reorder to a couple of small `updateMany` calls instead of one write per row in the
   group.
+
+**Invitations with two acceptance paths (Day 15 onward):**
+- An invitation's CREATION and its ACCEPTANCE are allowed to disagree about what's possible.
+  `createOrgInvitation` only ever needs to check "would this invitation be useful" (is the invitee
+  already a member of THIS organization?) — whether the invited email already has an account
+  elsewhere is deliberately not creation's problem to solve.
+- **A boolean on the preview response, not a query param or a URL variant, is what tells the
+  frontend which flow to render.** `InvitationPreview.accountExists` is computed once, at preview
+  time, and the whole page branches on it — reuse this "one flag decides the whole shape of the UI"
+  approach for any future feature where a single link needs to behave differently depending on
+  server-side state the visitor can't know in advance.
+- **Two genuinely different identity proofs, two separate routes — don't fold them into one.** The
+  original accept route proves identity via the one-time TOKEN (only the real recipient could have
+  the link); the "join a second org" route proves identity via an EXISTING logged-in session
+  (`requireAuth`), plus one extra check that the session's email matches the invitation's. These are
+  different enough that keeping them as two small, single-purpose routes/service functions was
+  chosen over one route branching on "was a password provided."
 
 **Real-time (Day 9 onward):**
 - `apps/api/src/lib/socket.ts` holds the ONE Socket.IO server instance (module-level variable,
@@ -526,7 +547,7 @@ independent re-refresh, original-error-surfaces-with-no-retry-loop) pass.
 
 ---
 
-### ✅ Day 14 — True Drag-and-Drop Reordering (most recently completed)
+### ✅ Day 14 — True Drag-and-Drop Reordering
 Day 8's `position` field only ever supported "append to the end of whichever column a card lands
 in" — dropping a card back among cards that were already there wasn't possible. `task.service.ts`'s
 `moveTask` gained an optional `targetPosition` (the exact 0-based slot to land in), and now branches
@@ -544,20 +565,34 @@ return" guard is gone. Verified with a standalone position-math simulation check
 array-splice as the reference answer across all 25 (oldIndex, targetIndex) pairs for a 5-card
 column, plus dedicated cross-column and fallback cases — all passed.
 
+### ✅ Day 15 — Multi-Organization Invitations (most recently completed)
+Day 5's `createOrgInvitation` used to reject outright the moment it saw an existing account for the
+invited email — a disclosed, deliberate limitation, not a bug. Today closes it by untangling two
+questions that Day 5 had tangled into one check: creation now only cares whether the invitee is
+already a member of THIS organization (still blocked); whether their email has an account AT ALL is
+resolved later, at acceptance time. `getInvitationPreview` gained one new field,
+`accountExists`, computed once and used to decide which of two completely different flows
+`AcceptInvitationPage.tsx` renders. A brand-new email keeps the original Day 3/5 experience
+unchanged (pick a password, `acceptInvitation` creates the account). An email that already has an
+account gets a new, separate, `requireAuth`-gated route — `POST .../accept-existing` →
+`acceptInvitationAsExistingUser` — that creates NO new account and asks for NO password at all; it
+only checks that the CURRENTLY logged-in session's email matches the invitation's, then adds one
+`Membership` row. The original `/accept` route also gained a defensive guard: if an account for that
+email exists by the time it's called, it now points the caller at the other route instead of trying
+to create a duplicate. No new permission, no new model — `Invitation`, `Membership`, and `Role` were
+all already exactly what this needed.
+
 ---
 
-### ⚠️ Days 15-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
+### ⚠️ Days 16-18 — NOT YET BUILT. Reconstructed from hints only — verify against the real SRS/schedule PDFs if you can find them.
 
 The schedule and build-guide PDFs referenced by the README are **not present in this repo**. What
-follows for Days 15-18 is reconstructed **only** from forward-looking comments already written into
-the Day 1-14 code and learning notes. Treat the day numbers below with **decreasing confidence** the
-further you go — Day 15 is an educated guess about ordering; Day 18 has zero hints anywhere.
+follows for Days 16-18 is reconstructed **only** from forward-looking comments already written into
+the Day 1-15 code and learning notes.
 
-**Day 15 — unordered, but these unbuilt features are explicitly on the list somewhere:**
+**Still unordered before Day 16, but explicitly on the list somewhere:**
 - **Permission model enhancements** — deny-rules or overrides on top of the flat allow-list (Day 5
   explicitly scoped these out, calling them a possible future addition, no day given).
-- **Multi-organization invitations** — inviting an email that already has an OpsSphere account into
-  a second org isn't supported yet (Day 5 explicitly rejects this case with an error).
 
 **Day 16 — "Hardening"** *(named explicitly once)*
 Accessibility and responsive-breakpoint polish beyond what Tailwind gives for free, per the Day 6
@@ -639,10 +674,10 @@ loops).** Never claim more confidence than what was actually run.
 
 ## 8. Current state / how to resume
 
-- Git: as of Day 14, the working tree has the Day 14 changes (plus Days 12-13 and the post-Day-11
+- Git: as of Day 15, the working tree has the Day 15 changes (plus Days 12-14 and the post-Day-11
   role-permission-editing fix) staged but **not yet committed** (the user has not asked for an
   automatic push since Day 7 — check `git log` and `git status` first before assuming anything
-  about what's actually committed; don't assume Days 8-14 are pushed just because Day 7 was).
+  about what's actually committed; don't assume Days 8-15 are pushed just because Day 7 was).
 - Real local testing of Day 12 needs the user's own Docker MinIO container actually running
   (`docker compose up -d minio`, console at `localhost:9001`) - this sandbox has never had one
   available, same gap as the database in every prior day.
@@ -653,6 +688,9 @@ loops).** Never claim more confidence than what was actually run.
 - Real local testing of Day 14 needs a real browser session dragging real cards against a real
   running MongoDB — this sandbox verified the position-math LOGIC directly (a standalone simulation
   checked against array-splice), not the real drag-and-drop-against-a-database experience.
+- Real local testing of Day 15 needs two real organizations and a real invitation email flow (via
+  Mailpit) against a real running MongoDB — this sandbox verified the ROUTING/auth-gate difference
+  between the two acceptance routes, not the actual end-to-end invite-and-join experience.
 - The README.md's "Status" line is stale (still says "Day 1 of 18") — worth fixing whenever
   convenient, it's a one-line change.
 - No `.env` file is assumed to exist in this sandbox — real local development (`pnpm dev` against
@@ -697,6 +735,6 @@ this file is a MAP for another AI picking up the project cold, not the whole ter
 ---
 
 **Bottom line for whoever picks this up next**: follow §5's rhythm exactly (including this file's
-own update step, §9), respect the conventions in §4 (they're consistent across 13,000+ lines of
+own update step, §9), respect the conventions in §4 (they're consistent across 13,300+ lines of
 code so far — don't introduce a different style), verify using §7's methodology, and be honest
-about the Day 15-18 uncertainty in §6 until you can get your hands on the real schedule PDF.
+about the Day 16-18 uncertainty in §6 until you can get your hands on the real schedule PDF.

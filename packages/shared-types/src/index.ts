@@ -141,6 +141,13 @@ export interface InvitationPreview {
   expiresAt: string;
   organizationName?: string;
   roleName?: string;
+  // DAY 15: tells the frontend which acceptance flow to show - a brand new
+  // email (accountExists: false) still sets a password via the original
+  // /accept route; an email that already has an OpsSphere account
+  // (accountExists: true) instead needs to be logged in as THAT account
+  // already and hits the new /accept-existing route with no password at
+  // all - see auth.service.ts's acceptInvitationAsExistingUser.
+  accountExists: boolean;
 }
 
 // ============================================================================

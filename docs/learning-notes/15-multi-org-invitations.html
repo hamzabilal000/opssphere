@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Learning Note 15 — Multi-Organization Invitations</title>
+<style>
+  :root {
+    --navy: #0f2138; --navy2: #12406b; --teal: #16b8a6; --blue: #2f6fed;
+    --text: #26303d; --muted: #5a6576; --bg-soft: #f6f8fb; --border: #dde3ec;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system,'Segoe UI',Helvetica,Arial,sans-serif; color: var(--text); background:#fff; margin:0; line-height:1.65; font-size:16px; }
+  .hero { background: linear-gradient(160deg,#0f2138 0%,#14314f 55%,#0d2436 100%); color:#fff; padding:42px 8vw 34px 8vw; }
+  .hero .kicker { color:#7fa0c9; font-size:13px; letter-spacing:1px; text-transform:uppercase; margin-bottom:10px; }
+  .hero h1 { font-size:27px; margin:0 0 8px 0; }
+  .hero p.sub { color:#b8c6db; font-size:15px; max-width:700px; margin:0; }
+  .daychip { display:inline-block; background:rgba(22,184,166,0.18); border:1px solid #16b8a6; color:#7be9d8; font-size:12.5px; font-weight:700; padding:4px 14px; border-radius:20px; margin-bottom:16px; }
+  .wrap { max-width:800px; margin:0 auto; padding:36px 8vw 80px 8vw; }
+  h2 { font-size:21px; color:var(--navy); margin-top:42px; margin-bottom:14px; border-bottom:2px solid var(--teal); padding-bottom:6px; }
+  h3 { font-size:16px; color:var(--navy2); margin-top:22px; margin-bottom:8px; }
+  p { margin:10px 0; font-size:16px; }
+  ul, ol { padding-left:22px; } li { margin-bottom:8px; font-size:16px; }
+  code { font-family:'SF Mono',Consolas,Monaco,monospace; font-size:14px; background:#eef1f5; padding:1px 6px; border-radius:4px; color:#b3273e; }
+  pre { background:#0f2138; color:#e6edf6; padding:16px 18px; border-radius:8px; overflow-x:auto; font-size:13.5px; line-height:1.6; margin:12px 0 20px 0; }
+  pre code { background:none; color:inherit; padding:0; font-size:13.5px; }
+  .callout { background:#eef6f6; border-left:4px solid var(--teal); padding:14px 18px; border-radius:6px; margin:18px 0; font-size:15.5px; }
+  .callout.blue { background:#eaf2fb; border-left-color:var(--blue); }
+  .callout.amber { background:#fdf6e8; border-left-color:#e0a72e; }
+  .callout strong.title { display:block; color:var(--navy); margin-bottom:5px; font-size:15.5px; }
+  .step { display:flex; gap:14px; margin-bottom:16px; align-items:flex-start; }
+  .step .num { flex:0 0 30px; height:30px; background:var(--navy); color:#fff; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; }
+  .step .stext { padding-top:3px; font-size:15.5px; } .step .stext b { color:var(--navy); }
+  table { width:100%; border-collapse:collapse; margin:14px 0 20px 0; font-size:14.5px; }
+  th { background:var(--navy); color:#fff; text-align:left; padding:8px 10px; }
+  td { padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:nth-child(even) td { background:var(--bg-soft); }
+  .checklist { list-style:none; padding-left:0; } .checklist li { padding-left:28px; position:relative; margin-bottom:8px; }
+  .checklist li::before { content:"✓"; position:absolute; left:0; top:0; color:var(--teal); font-weight:700; }
+  .nav-footer { display:flex; justify-content:space-between; margin-top:50px; padding-top:20px; border-top:1px solid var(--border); font-size:13.5px; color:var(--muted); flex-wrap:wrap; gap:8px; }
+  a { color:var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="kicker">OpsSphere · Learning Notes</div>
+  <div class="daychip">DAY 15 OF 18</div>
+  <h1>Multi-Organization Invitations</h1>
+  <p class="sub">Since Day 5, inviting someone whose email already had an OpsSphere account into a
+  second organization failed with a flat 409 - a real, disclosed limitation, not a bug. Today closes
+  it, without ever touching what an invitation IS - only what accepting one can now mean.</p>
+</div>
+
+<div class="wrap">
+
+<h2>The one-paragraph summary</h2>
+<p>Day 5's <code>createOrgInvitation</code> rejected outright the moment it saw an existing account
+for the invited email - "inviting existing users into a second organization isn't supported yet," its
+own comment admitted. The reason was really in <code>acceptInvitation</code>: it always creates a
+brand-new <code>User</code> document, with no path for "this person already has a password, just add
+them to this org." Today adds that second path as its own endpoint,
+<code>acceptInvitationAsExistingUser</code> - no new password, no new account, just one more
+<code>Membership</code> row - and teaches the invitation-creation step to stop blocking existing users
+in the first place.</p>
+
+<div class="callout blue">
+  <strong class="title">Same rule as always</strong>
+  Every changed file has comments explaining what's new - especially <code>auth.service.ts</code>'s
+  new <code>acceptInvitationAsExistingUser</code> and <code>AcceptInvitationPage.tsx</code>'s branching
+  logic, which is where almost all of today's actual thinking shows up.
+</div>
+
+<h2>Three new concepts, explained simply</h2>
+
+<h3>1. Two different questions were tangled into one 409</h3>
+<p>Day 5's single check actually covered two SEPARATE questions at once: "does this email already
+have an account?" and "would this invitation actually be useful?" Today untangles them.
+<code>createOrgInvitation</code> now only cares about the second one - is this email already a member
+of THIS specific organization? (still a 409 if so). Whether the email has an account AT ALL is no
+longer creation's problem; it becomes ACCEPTANCE's problem instead, decided the moment someone actually
+opens the invitation link.</p>
+
+<h3>2. One boolean tells the frontend which of two entirely different flows to show</h3>
+<p><code>InvitationPreview</code> gained one new field: <code>accountExists</code>. A brand-new email
+still gets the original Day 3/5 experience - type a password, get an account, get logged in
+automatically. An email that already has an account gets something with a completely different shape:
+no password field at all, just a check of "are you ALREADY logged in as that account right now?" (via
+the same <code>useMeQuery</code> hook every other page uses) and, if so, one button that just adds the
+missing <code>Membership</code>.</p>
+
+<h3>3. Being logged in already IS the proof of identity - nothing invitation-specific needed</h3>
+<p>The original <code>/accept</code> route proves identity through the invitation TOKEN itself (only
+the real recipient could have clicked the emailed link). The new <code>/accept-existing</code> route
+proves identity a completely different way: it's gated by the exact same <code>requireAuth</code>
+middleware every other protected route in the app uses, and then does ONE extra check - does the
+CURRENTLY logged-in account's email match the invitation's email, exactly? If someone is logged in as
+the wrong account, they're told plainly to log out and back in as the right one; the token itself
+isn't consumed by that failed attempt, so trying again with the correct account works.</p>
+
+<h2>What actually happens, step by step</h2>
+
+<div class="step"><div class="num">1</div><div class="stext">An org admin invites <code>bob@example.com</code> - who already has an OpsSphere account from a DIFFERENT organization - into theirs. <code>createOrgInvitation</code> no longer blocks this; it only checks Bob isn't already a member of THIS org.</div></div>
+<div class="step"><div class="num">2</div><div class="stext">Bob gets the same invitation email as always and opens the link. <code>getInvitationPreview</code> now also checks whether an account exists for that email and includes <code>accountExists: true</code> in its response.</div></div>
+<div class="step"><div class="num">3</div><div class="stext"><code>AcceptInvitationPage</code> sees <code>accountExists</code> and renders the SECOND flow - no password field, just a message and (if Bob's already logged in as himself) a "Join" button.</div></div>
+<div class="step"><div class="num">4</div><div class="stext">If Bob isn't currently logged in (or is logged into some OTHER account), the page tells him to log in as <code>bob@example.com</code> and come back to this same link - the invitation token isn't consumed by any of this, so revisiting it is always safe.</div></div>
+<div class="step"><div class="num">5</div><div class="stext">Once logged in as himself, clicking "Join" calls the new <code>POST .../accept-existing</code> route - it re-verifies his session's email matches the invitation, creates the <code>Membership</code>, marks the invitation accepted, and sends him to the dashboard. No new account, no new password, ever.</div></div>
+
+<h2>The new/changed files, in one picture</h2>
+<pre><code>packages/shared-types/src/index.ts   <span style="color:#7be9d8">→ InvitationPreview + accountExists</span>
+
+apps/api/src/modules/
+├── auth/auth.service.ts        <span style="color:#7be9d8">→ getInvitationPreview computes accountExists; acceptInvitation
+│                                  now rejects if the account already exists (send them to the
+│                                  other route instead); + acceptInvitationAsExistingUser (new)</span>
+├── auth/auth.controller.ts       <span style="color:#7be9d8">→ + acceptInvitationAsExistingUserHandler</span>
+├── auth/auth.routes.ts             <span style="color:#7be9d8">→ + POST .../accept-existing (requireAuth-gated, unlike /accept)</span>
+└── organizations/organization.service.ts  <span style="color:#7be9d8">→ createOrgInvitation no longer blocks
+                                              existing-user emails, only already-a-member-here ones</span>
+
+apps/web/src/
+├── lib/api.ts                  <span style="color:#7be9d8">→ + acceptInvitationAsExisting()</span>
+└── Pages/AcceptInvitationPage.tsx  <span style="color:#7be9d8">→ branches on accountExists into two entirely
+                                       different flows, using useMeQuery to check who's logged in</span></code></pre>
+
+<h2>A design detail worth understanding: why acceptance needed a whole SEPARATE route</h2>
+<div class="callout amber">
+  <strong class="title">Folding this into the existing /accept route would have made it do two jobs</strong>
+  It would have been possible to keep one endpoint and branch INSIDE it on whether a password was
+  provided. That was deliberately rejected: the original <code>/accept</code> is public (no login
+  required - the invitee doesn't have an account yet, that's the whole point) and its job is CREATING
+  an account. The new route is the opposite in every dimension - it REQUIRES being logged in already,
+  and its job is exclusively adding a <code>Membership</code>, never touching the <code>User</code>
+  collection at all. Two routes with two different middleware chains and two single-purpose service
+  functions is more code, but each one stays honestly simple - matching this project's running
+  preference for a few small, obvious functions over one function that branches its way through
+  multiple unrelated responsibilities.
+</div>
+
+<h2>What was deliberately left simple for today</h2>
+<ul>
+  <li>No "redirect back here after login" wiring on <code>LoginPage.tsx</code> - someone who isn't
+  logged in is told to log in and then reopen the SAME invitation link by hand. A `?next=` redirect
+  param would be a reasonable small polish upgrade, not required to prove the underlying feature.</li>
+  <li>Dropping an invitation onto an account logged in as the WRONG email shows a plain instruction to
+  log out and back in - no automatic account-switcher UI. OpsSphere doesn't have a "switch account
+  without a full logout" feature yet at all, so this matches how account-switching works everywhere
+  else in the app today.</li>
+  <li>The invitation EMAIL itself still reads the same regardless of which flow the recipient will end
+  up seeing - it doesn't say "you already have an account" up front. The page figures that out once
+  they click through, which is simpler than maintaining two email templates for one event.</li>
+</ul>
+
+<h2>How to try it yourself</h2>
+<ol>
+  <li>Run <code>pnpm install</code> - no new packages today.</li>
+  <li>Create two organizations, both owned by the same admin account for simplicity.</li>
+  <li>From Organization A, invite an email that's already a MEMBER of Organization B.</li>
+  <li>Open the invitation link while logged OUT - confirm it tells you to log in as that email first,
+  with no password field shown at all.</li>
+  <li>Log in as that member, then reopen the exact same invitation link - confirm a "Join Organization
+  A" button appears, and clicking it adds you without ever touching your password.</li>
+  <li>Confirm the org switcher (Day 6's Sidebar) now shows both organizations for that account.</li>
+</ol>
+
+<h2>What was actually verified</h2>
+<table>
+  <tr><th>Check</th><th>Result</th></tr>
+  <tr><td>Every package (shared-types, validation, api, web) compiles with no TypeScript errors - clean on the first attempt, no fix-up round needed</td><td>✅ Confirmed</td></tr>
+  <tr><td>A full frontend production build (<code>vite build</code>) completes with no errors - 1,695 modules bundled successfully</td><td>✅ Confirmed</td></tr>
+  <tr><td>The new <code>/accept-existing</code> route requires auth (401 with no login cookie), unlike the original <code>/accept</code> route which remains intentionally public</td><td>✅ Confirmed</td></tr>
+  <tr><td>A bogus route still 404s</td><td>✅ Confirmed</td></tr>
+  <tr><td>The actual end-to-end flow - inviting a real second-org user, previewing accountExists correctly, and successfully joining via the existing-account button against a real running MongoDB</td><td>⏳ Needs you to test it locally - same gap as the database in every prior day</td></tr>
+</table>
+
+<h2>What's next</h2>
+<p>Permission model enhancements (deny-rules/overrides on top of the flat allow-list) remain the last
+concretely-referenced unbuilt feature before Days 16-18's "Hardening"/"Polish"/unknown phases. See
+<code>docs/PROJECT_HANDOFF.md</code> for the full, honestly-uncertain breakdown.</p>
+
+<div class="nav-footer">
+  <span>OpsSphere Learning Notes — Note 15 of 18</span>
+  <span>Every code file also has comments — read this note first, then the code.</span>
+</div>
+
+</div>
+</body>
+</html>

@@ -26,6 +26,7 @@ import {
   createInvitationHandler,
   getInvitationPreviewHandler,
   acceptInvitationHandler,
+  acceptInvitationAsExistingUserHandler,
 } from "./auth.controller.js";
 import { requireAuth } from "./auth.middleware.js";
 
@@ -60,3 +61,9 @@ authRouter.post("/reset-password", resetPasswordHandler);
 authRouter.post("/invitations", requireAuth, createInvitationHandler);
 authRouter.get("/invitations/:token", getInvitationPreviewHandler);
 authRouter.post("/invitations/:token/accept", acceptInvitationHandler);
+
+// ---- Day 15: accepting an invitation as an ALREADY-EXISTING account -------
+// The opposite of the route above: THIS one requires being logged in
+// (requireAuth) - it's for someone who already has an OpsSphere account
+// and is just joining a second organization, not creating a new one.
+authRouter.post("/invitations/:token/accept-existing", requireAuth, acceptInvitationAsExistingUserHandler);

@@ -367,3 +367,21 @@ export async function acceptInvitationHandler(req: Request, res: Response) {
   };
   res.status(201).json(body);
 }
+
+// POST /api/v1/auth/invitations/:token/accept-existing  (protected by
+// requireAuth - DAY 15's "join a second organization" route. No password
+// in the body at all: proving who you are comes from already being
+// logged in, not from this endpoint.)
+export async function acceptInvitationAsExistingUserHandler(req: Request, res: Response) {
+  const { organizationId } = await authService.acceptInvitationAsExistingUser(
+    String(req.params.token ?? ""),
+    req.userId ?? ""
+  );
+
+  const body: ApiSuccessResponse<{ organizationId: string }> = {
+    success: true,
+    message: "Invitation accepted.",
+    data: { organizationId },
+  };
+  res.status(200).json(body);
+}

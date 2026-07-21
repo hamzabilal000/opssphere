@@ -274,6 +274,13 @@ export function acceptInvitation(token: string, password: string): Promise<{ use
   });
 }
 
+// DAY 15: the "I already have an account, just add me to this org" path -
+// no password in the body at all, since being logged in already IS the
+// proof of identity here (see auth.service.ts's acceptInvitationAsExistingUser).
+export function acceptInvitationAsExisting(token: string): Promise<{ organizationId: string }> {
+  return apiRequest(`/auth/invitations/${encodeURIComponent(token)}/accept-existing`, { method: "POST" });
+}
+
 // ============================================================================
 // DAY 4 — ORGANIZATIONS API CALLS
 // ============================================================================
